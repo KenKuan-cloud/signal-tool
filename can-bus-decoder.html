@@ -1,0 +1,3490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAN Bus Decoder</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;700;800&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0e14; --surface:#12161f; --border:#1e2535;
+  --text:#c8d0e0; --muted:#4a5568;
+  --ch1:#00e5ff; --ch2:#ff4f7b; --ch3:#ffe066; --ch4:#69ff9a;
+  --canvas-bg:#0b0e14; --canvas-grid:#1a2030; --canvas-axis:#4a5568;
+  --canvas-border:#1e2535; --canvas-label:#fff;
+}
+html.light{
+  --bg:#f4f5f7; --surface:#ffffff; --border:#d1d5db;
+  --text:#1f2937; --muted:#6b7280;
+  --ch1:#0891b2; --ch2:#e11d48; --ch3:#ca8a04; --ch4:#16a34a;
+  --canvas-bg:#ffffff; --canvas-grid:#e5e7eb; --canvas-axis:#6b7280;
+  --canvas-border:#d1d5db; --canvas-label:#111827;
+}
+html.light .hbtn:hover{color:#fff;}
+html,body{height:100%;background:var(--bg);color:var(--text);
+  font-family:'JetBrains Mono',monospace;overflow:hidden;display:flex;flex-direction:column;}
+
+/* ── Header ── */
+header{display:flex;align-items:center;gap:14px;padding:9px 18px;
+  border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:17px;color:var(--canvas-label);white-space:nowrap;}
+.logo span{color:var(--ch1);}
+#meta-strip{display:flex;gap:14px;font-size:10px;color:var(--muted);flex-wrap:wrap;}
+#meta-strip b{color:var(--text);}
+.hbtn{background:transparent;border:1px solid var(--ch1);color:var(--ch1);
+  font-family:inherit;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  padding:5px 14px;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s;}
+.hbtn:hover{background:var(--ch1);color:var(--bg);}
+#file-input{display:none;}
+
+/* ── Tab strip ── */
+#tab-strip{display:none;align-items:center;gap:0;padding:0 18px;
+  border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;
+  overflow-x:auto;overflow-y:hidden;white-space:nowrap;min-height:30px;}
+#tab-strip.show{display:flex;}
+#tab-strip::-webkit-scrollbar{height:5px;}
+#tab-strip::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.tab{display:inline-flex;align-items:center;gap:8px;padding:7px 8px 7px 12px;
+  border-right:1px solid var(--border);cursor:pointer;font-size:11px;
+  color:var(--muted);max-width:240px;flex-shrink:0;
+  transition:background .12s,color .12s;}
+.tab:hover{color:var(--text);background:var(--bg);}
+.tab.active{color:var(--ch1);background:var(--bg);
+  box-shadow:inset 0 -2px 0 var(--ch1);}
+.tab .tab-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tab .tab-close{display:inline-flex;align-items:center;justify-content:center;
+  width:16px;height:16px;border-radius:2px;font-size:11px;color:var(--muted);
+  opacity:.6;transition:opacity .12s,background .12s;}
+.tab:hover .tab-close{opacity:1;}
+.tab .tab-close:hover{background:var(--border);color:var(--text);}
+.tab-newbtn{display:inline-flex;align-items:center;justify-content:center;
+  padding:5px 10px;margin-left:6px;cursor:pointer;color:var(--muted);
+  font-size:14px;line-height:1;border-radius:2px;flex-shrink:0;
+  transition:background .12s,color .12s;}
+.tab-newbtn:hover{background:var(--bg);color:var(--ch1);}
+
+/* ── Main layout ── */
+#main{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+
+/* ── Drop zone ── */
+#drop-zone{flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:14px;border:1px dashed var(--border);margin:32px;
+  border-radius:4px;cursor:pointer;transition:border-color .2s;}
+#drop-zone.over{border-color:var(--ch1);}
+#drop-zone svg{opacity:.2;}
+.dt{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--canvas-label);opacity:.45;}
+.ds{font-size:11px;color:var(--muted);text-align:center;max-width:500px;}
+
+/* ── Loading ── */
+#loading{display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+#loading.show{display:flex;}
+.spin{width:36px;height:36px;border:2px solid var(--border);
+  border-top-color:var(--ch1);border-radius:50%;animation:sp .7s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.lmsg{font-size:11px;color:var(--muted);letter-spacing:.08em;}
+
+/* ── App: dashboard layout ── */
+#app{flex:1;display:none;overflow:hidden;}
+#app.show{display:flex;}
+
+/* ── Left sidebar ── */
+#sidebar{width:240px;min-width:200px;flex-shrink:0;border-right:1px solid var(--border);
+  background:var(--surface);overflow-y:auto;display:flex;flex-direction:column;}
+#sidebar::-webkit-scrollbar{width:5px;}
+#sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+.sb-section{padding:10px 14px;border-bottom:1px solid var(--border);}
+.sb-title{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.sb-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.sb-row label{font-size:10px;color:var(--muted);min-width:60px;flex-shrink:0;}
+.sb-row select,.sb-row input[type=number]{
+  flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);
+  font-family:inherit;font-size:10px;padding:4px 6px;border-radius:2px;min-width:0;}
+.sb-row select{cursor:pointer;}
+.sb-row input[type=number]{width:80px;flex:unset;}
+
+#decode-btn{width:100%;padding:8px;background:transparent;
+  border:1px solid var(--ch1);color:var(--ch1);font-family:inherit;font-size:11px;
+  letter-spacing:.1em;text-transform:uppercase;cursor:pointer;
+  transition:background .15s,color .15s;margin-top:4px;}
+#decode-btn:hover{background:var(--ch1);color:var(--bg);}
+#decode-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* Summary panel */
+.sum-row{display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;}
+.sum-row .lbl{color:var(--muted);}
+.sum-row .val{color:var(--text);font-weight:600;}
+.sum-row .val.err{color:var(--ch2);}
+.sum-row .val.ok{color:var(--ch4);}
+
+/* ── Right main area ── */
+#right-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+
+/* Pipeline strip */
+#pipeline-strip{display:flex;align-items:center;gap:0;padding:6px 14px;
+  border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;}
+.pipe-step{display:flex;align-items:center;gap:6px;padding:6px 16px;
+  border:1px solid var(--border);border-radius:2px;margin-right:8px;
+  font-size:11px;color:var(--muted);cursor:pointer;user-select:none;
+  transition:border-color .15s,color .15s,background .15s;}
+.pipe-step:hover{border-color:var(--text);color:var(--text);}
+.pipe-step.active{border-color:var(--ch1);color:var(--ch1);background:rgba(0,229,255,0.05);}
+.pipe-step.done .step-check{color:var(--ch4);}
+.pipe-step.disabled{opacity:.35;pointer-events:none;}
+.step-num{font-weight:600;font-size:12px;}
+.step-icon{font-size:14px;}
+.step-check{font-size:11px;color:transparent;margin-left:2px;}
+
+/* Canvas area */
+#canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+#minimap-wrap{height:40px;flex-shrink:0;border-bottom:1px solid var(--border);
+  background:var(--bg);position:relative;display:none;}
+#minimap-wrap.show{display:block;}
+#minimap-canvas{display:block;width:100%;height:100%;}
+#minimap-sel{position:absolute;top:0;bottom:0;background:rgba(0,229,255,0.12);
+  border-left:1px solid var(--ch1);border-right:1px solid var(--ch1);cursor:grab;pointer-events:auto;}
+
+#main-canvas-wrap{flex:1;overflow:hidden;position:relative;background:var(--bg);min-height:200px;}
+#main-canvas{display:block;cursor:crosshair;}
+#main-canvas:active{cursor:grabbing;}
+
+/* Frames table */
+#frames-panel{flex-shrink:0;max-height:260px;overflow:auto;border-top:1px solid var(--border);
+  background:var(--surface);display:none;}
+#frames-panel.show{display:block;}
+#frames-panel::-webkit-scrollbar{width:5px;height:5px;}
+#frames-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+.ftbl{width:100%;border-collapse:collapse;font-size:10px;}
+.ftbl th{position:sticky;top:0;background:var(--surface);color:var(--muted);
+  font-weight:600;text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);
+  font-size:9px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;z-index:1;}
+.ftbl td{padding:4px 8px;border-bottom:1px solid var(--border);white-space:nowrap;
+  color:var(--text);vertical-align:top;}
+.ftbl tr:hover{background:rgba(0,229,255,0.04);}
+.ftbl tr.selected{background:rgba(0,229,255,0.08);}
+.ftbl tr.has-error{border-left:3px solid var(--ch2);}
+.ftbl tr.has-error td:last-child{color:var(--ch2);font-weight:600;}
+.ftbl .mono{font-family:'JetBrains Mono',monospace;}
+.ftbl .data-cell{max-width:300px;overflow:hidden;text-overflow:ellipsis;}
+.err-tag{display:inline-block;padding:1px 5px;border-radius:2px;font-size:9px;font-weight:600;
+  background:rgba(255,79,123,0.12);color:var(--ch2);margin-right:3px;}
+
+/* ── Scrollbar ── */
+#sidebar::-webkit-scrollbar,#frames-panel::-webkit-scrollbar{width:5px;}
+#sidebar::-webkit-scrollbar-thumb,#frames-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+/* ── Cursor readout ── */
+#cursor-readout{position:absolute;top:4px;right:8px;font-size:9px;color:var(--muted);
+  pointer-events:none;z-index:2;white-space:nowrap;font-family:'JetBrains Mono',monospace;}
+
+/* ── Tooltip ── */
+#canvas-tooltip{position:absolute;display:none;pointer-events:none;z-index:10;
+  background:var(--surface);border:1px solid var(--border);border-radius:3px;
+  padding:5px 8px;font-size:9px;color:var(--text);white-space:nowrap;
+  box-shadow:0 2px 8px rgba(0,0,0,0.3);max-width:320px;}
+#canvas-tooltip .tt-title{font-weight:600;color:var(--canvas-label);margin-bottom:3px;}
+#canvas-tooltip .tt-row{display:flex;gap:8px;}
+#canvas-tooltip .tt-label{color:var(--muted);}
+#canvas-tooltip .tt-val{color:var(--text);font-weight:600;}
+
+/* ── Frame filter ── */
+#frame-filter-bar{display:none;align-items:center;gap:8px;padding:4px 8px;
+  border-bottom:1px solid var(--border);background:var(--surface);}
+#frame-filter-bar.show{display:flex;}
+#frame-filter-bar label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+#frame-filter-bar input{background:var(--bg);border:1px solid var(--border);color:var(--text);
+  font-family:inherit;font-size:10px;padding:3px 6px;border-radius:2px;flex:1;min-width:0;max-width:180px;}
+#frame-filter-bar select{background:var(--bg);border:1px solid var(--border);color:var(--text);
+  font-family:inherit;font-size:10px;padding:3px 6px;border-radius:2px;cursor:pointer;}
+
+/* ── Export button ── */
+.export-btn{background:transparent;border:1px solid var(--ch4);color:var(--ch4);
+  font-family:inherit;font-size:9px;padding:3px 10px;cursor:pointer;letter-spacing:.08em;
+  text-transform:uppercase;transition:background .15s,color .15s;border-radius:2px;}
+.export-btn:hover{background:var(--ch4);color:var(--bg);}
+.export-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* ── Crosshair ── */
+.crosshair-v,.crosshair-h{position:absolute;pointer-events:none;z-index:3;}
+.crosshair-v{width:1px;top:0;bottom:0;border-left:1px dashed var(--ch1);opacity:.4;}
+.crosshair-h{height:1px;left:0;right:0;border-top:1px dashed var(--ch1);opacity:.4;}
+
+/* ── Status bar ── */
+#status-bar{display:none;align-items:center;gap:12px;padding:3px 14px;
+  border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;
+  font-size:9px;color:var(--muted);}
+#status-bar.show{display:flex;}
+#status-bar .sb-gap{flex:1;}
+.kbd{display:inline-block;padding:1px 5px;border:1px solid var(--border);border-radius:2px;
+  font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--muted);
+  background:var(--bg);vertical-align:middle;margin:0 1px;}
+
+/* ── Responsive ── */
+@media(max-width:700px){
+  #sidebar{width:180px;min-width:140px;}
+  .sb-row label{min-width:40px;}
+  .pipe-step span:not(.step-num):not(.step-check){display:none;}
+  .pipe-step{padding:6px 10px;}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">CAN<span>.</span>DECODE</div>
+  <div id="meta-strip"></div>
+  <div style="flex:1"></div>
+  <button class="hbtn" id="theme-btn">&#9728; Light</button>
+  <button class="hbtn" id="close-btn" style="display:none;">&#10005; Close</button>
+  <button class="hbtn" id="open-btn">Open CSV</button>
+  <input type="file" id="file-input" accept=".csv,.txt">
+</header>
+
+<div id="tab-strip"></div>
+
+<div id="main">
+  <!-- Drop zone -->
+  <div id="drop-zone">
+    <svg width="44" height="44" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+      <path stroke-linecap="round" stroke-linejoin="round"
+        d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+    </svg>
+    <div class="dt">Drop CSV here</div>
+    <div class="ds">Tektronix / Yokogawa DL350 .csv with CAN_H and CAN_L channels<br>
+      Classical CAN decode: raw waveform &#8594; differential &#8594; bit sampling &#8594; frame parsing</div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading">
+    <div class="spin"></div>
+    <div class="lmsg" id="lmsg">Reading...</div>
+  </div>
+
+  <!-- App: dashboard -->
+  <div id="app">
+    <!-- Left sidebar -->
+    <div id="sidebar">
+      <!-- Config -->
+      <div class="sb-section">
+        <div class="sb-title">CAN Configuration</div>
+        <div class="sb-row">
+          <label>CAN_H</label>
+          <select id="sel-canh"></select>
+        </div>
+        <div class="sb-row">
+          <label>CAN_L</label>
+          <select id="sel-canl"></select>
+        </div>
+        <div class="sb-row">
+          <label>Type</label>
+          <select id="sel-cantype">
+            <option value="classical" selected>Classical CAN</option>
+            <option value="fd" disabled>CAN FD (coming soon)</option>
+          </select>
+        </div>
+        <div class="sb-row">
+          <label>Bit Rate</label>
+          <select id="sel-bitrate">
+            <option value="125000">125 kbit/s</option>
+            <option value="250000">250 kbit/s</option>
+            <option value="500000" selected>500 kbit/s</option>
+            <option value="1000000">1 Mbit/s</option>
+            <option value="custom">Custom...</option>
+          </select>
+        </div>
+        <div class="sb-row" id="custom-rate-row" style="display:none;">
+          <label>Custom</label>
+          <input type="number" id="inp-custom-rate" value="500000" min="1000" step="1000">
+          <span style="font-size:9px;color:var(--muted);">bit/s</span>
+        </div>
+        <div class="sb-row">
+          <label>Thresh</label>
+          <input type="number" id="inp-threshold" value="0.7" step="0.1" style="width:70px;">
+          <span style="font-size:9px;color:var(--muted);">V</span>
+        </div>
+        <div class="sb-row">
+          <label>Hyster</label>
+          <input type="number" id="inp-hysteresis" value="0.1" step="0.05" style="width:70px;">
+          <span style="font-size:9px;color:var(--muted);">V</span>
+        </div>
+        <button id="decode-btn" disabled>Decode</button>
+      </div>
+
+      <!-- Summary -->
+      <div class="sb-section" id="summary-section" style="display:none;">
+        <div class="sb-title">Decode Summary</div>
+        <div id="summary-content"></div>
+      </div>
+
+      <!-- Channel info -->
+      <div class="sb-section">
+        <div class="sb-title">File Info</div>
+        <div id="file-info" style="font-size:10px;color:var(--muted);"></div>
+      </div>
+    </div>
+
+    <!-- Right: pipeline + canvas + table -->
+    <div id="right-area">
+      <!-- Pipeline strip -->
+      <div id="pipeline-strip">
+        <div class="pipe-step active" data-step="1">
+          <span class="step-num">1</span>
+          <span class="step-icon">&#8776;</span>
+          <span>Raw</span>
+          <span class="step-check">&#10003;</span>
+        </div>
+        <div class="pipe-step disabled" data-step="2">
+          <span class="step-num">2</span>
+          <span class="step-icon">&#916;</span>
+          <span>Diff</span>
+          <span class="step-check">&#10003;</span>
+        </div>
+        <div class="pipe-step disabled" data-step="3">
+          <span class="step-num">3</span>
+          <span class="step-icon">01</span>
+          <span>Bits</span>
+          <span class="step-check">&#10003;</span>
+        </div>
+        <div class="pipe-step disabled" data-step="4">
+          <span class="step-num">4</span>
+          <span class="step-icon">&#9635;</span>
+          <span>Frames</span>
+          <span class="step-check">&#10003;</span>
+        </div>
+        <div style="flex:1"></div>
+        <span id="pipeline-status" style="font-size:10px;color:var(--muted);"></span>
+      </div>
+
+      <!-- Canvas area -->
+      <div id="canvas-area">
+        <div id="minimap-wrap">
+          <canvas id="minimap-canvas"></canvas>
+          <div id="minimap-sel"></div>
+        </div>
+        <div id="main-canvas-wrap">
+          <canvas id="main-canvas"></canvas>
+          <div id="cursor-readout"></div>
+          <div id="canvas-tooltip"></div>
+          <div class="crosshair-v" id="xhair-v" style="display:none;"></div>
+          <div class="crosshair-h" id="xhair-h" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Frame filter & export bar -->
+      <div id="frame-filter-bar">
+        <label>Filter</label>
+        <input type="text" id="frame-filter-id" placeholder="ID (hex)..." title="Filter by CAN ID (hex prefix match)">
+        <select id="frame-filter-status">
+          <option value="all">All</option>
+          <option value="ok">OK only</option>
+          <option value="error">Errors only</option>
+        </select>
+        <select id="frame-filter-type">
+          <option value="all">All Types</option>
+          <option value="std">Standard</option>
+          <option value="ext">Extended</option>
+        </select>
+        <div style="flex:1"></div>
+        <button class="export-btn" id="export-frames-btn" disabled>Export CSV</button>
+        <button class="export-btn" id="export-bits-btn" disabled>Export Bits</button>
+      </div>
+
+      <!-- Frames table -->
+      <div id="frames-panel">
+        <table class="ftbl">
+          <thead>
+            <tr>
+              <th>#</th><th>Time</th><th>Type</th><th>ID</th><th>RTR</th>
+              <th>DLC</th><th>Data</th><th>CRC</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="frames-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div id="status-bar">
+    <span id="sb-pos">--</span>
+    <span id="sb-zoom">--</span>
+    <span class="sb-gap"></span>
+    <span><span class="kbd">1</span>-<span class="kbd">4</span> Steps</span>
+    <span><span class="kbd">R</span> Reset zoom</span>
+    <span><span class="kbd">Scroll</span> Zoom</span>
+    <span><span class="kbd">Drag</span> Pan</span>
+    <span><span class="kbd">DblClick</span> Fit</span>
+    <span><span class="kbd">F</span> Filter</span>
+    <span><span class="kbd">E</span> Export</span>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// CAN BUS DECODER - Complete Implementation
+// ============================================================================
+
+// ── Constants ──
+const CH_DARK  = ['#00e5ff','#ff4f7b','#ffe066','#69ff9a'];
+const CH_LIGHT = ['#0891b2','#e11d48','#ca8a04','#16a34a'];
+let CH_COLORS  = CH_DARK;
+let isDark = true;
+
+// Frame field colors
+const FIELD_COLORS = {
+  SOF:     '#4a90d9',
+  ID:      '#2dd4bf',
+  SRR:     '#f97316',
+  IDE:     '#f97316',
+  RTR:     '#f97316',
+  r0:      '#eab308',
+  r1:      '#eab308',
+  DLC:     '#eab308',
+  DATA:    '#22d3ee',
+  CRC:     '#a78bfa',
+  CRC_DEL: '#a78bfa',
+  ACK_OK:  '#4ade80',
+  ACK_NO:  '#f87171',
+  ACK_DEL: '#6b7280',
+  EOF:     '#6b7280',
+  STUFF:   '#555555',
+};
+
+const CHUNK_ROWS     = 1000000;
+const PREVIEW_PTS    = 400;
+const AUTO_LOAD_MAX  = 500000;
+const PAD = {l:54, r:16, t:12, b:28};
+
+// ── Utilities (reused from signal-viewer) ──
+function themeColors(){
+  const s=getComputedStyle(document.documentElement);
+  return {
+    bg:       s.getPropertyValue('--canvas-bg').trim(),
+    grid:     s.getPropertyValue('--canvas-grid').trim(),
+    axis:     s.getPropertyValue('--canvas-axis').trim(),
+    border:   s.getPropertyValue('--canvas-border').trim(),
+    label:    s.getPropertyValue('--canvas-label').trim(),
+    text:     s.getPropertyValue('--text').trim(),
+    muted:    s.getPropertyValue('--muted').trim(),
+    selDim:   isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.15)',
+    selFill:  isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,100,200,0.08)',
+    measFill: isDark ? 'rgba(255,224,102,0.08)' : 'rgba(202,138,4,0.10)',
+    loBg:     isDark ? '#6b7a96' : '#9ca3af',
+  };
+}
+
+function setupCanvas(canvas,W,H){
+  const dpr=devicePixelRatio||1;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  const ctx=canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+  return ctx;
+}
+
+function formatSI(v){
+  if(v===0)return'0'; const a=Math.abs(v);
+  if(a>=1e9)return(v/1e9).toPrecision(3)+'G';
+  if(a>=1e6)return(v/1e6).toPrecision(3)+'M';
+  if(a>=1e3)return(v/1e3).toPrecision(3)+'k';
+  if(a>=1)  return v.toPrecision(4);
+  if(a>=1e-3)return(v*1e3).toPrecision(3)+'m';
+  if(a>=1e-6)return(v*1e6).toPrecision(3)+'µ';
+  if(a>=1e-9)return(v*1e9).toPrecision(3)+'n';
+  return v.toExponential(2);
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+
+function download(content,filename){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type:'text/csv'}));
+  a.download=filename; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ── State ──
+let fileText='', meta={}, dataByteStart=0, sigNames=[], sigCount=0, visible=[];
+let allLineOffsets=[], totalRows=0, chunkBoundaries=[];
+let chunks=[], globalYMin=Infinity, globalYMax=-Infinity;
+
+// Waveform data for current loaded portion
+let waveData=null; // {time[], chs[]}
+let waveRowStart=0, waveRowEnd=0;
+
+// Zoom state per step
+let zoomState={
+  1:{tMin:null,tMax:null},
+  2:{tMin:null,tMax:null},
+  3:{tMin:null,tMax:null},
+  4:{tMin:null,tMax:null}
+};
+
+// CAN config
+let canHIdx=0, canLIdx=1;
+let canBitRate=500000, canThreshold=0.7, canHysteresis=0.1;
+
+// CAN decode results
+let diffData=null;        // {time[], diff[]}
+let canSegments=[];       // [{state:'D'|'R', tStart, tEnd, dur}]
+let canBits=[];           // [{value:0|1, time, bitStart, bitEnd}]
+let canBitsDestuffed=[];  // [{value:0|1, time, bitStart, bitEnd}] after destuffing
+let stuffPositions=[];    // indices in canBits that are stuff bits
+let stuffErrors=[];       // error objects
+let canFrames=[];         // parsed frame objects
+
+let pipelineStep=1;       // 1-4
+let pipelineComplete=[true,false,false,false];
+let selectedFrameIdx=-1;
+
+// Drag state
+let mainDragStart=null;
+
+// Multi-file sessions
+let sessions=[], currentSessionId=null, _sessionIdSeq=0;
+
+// ── DOM ──
+const $=id=>document.getElementById(id);
+const openBtn=$('open-btn'), fileInput=$('file-input'), dropZone=$('drop-zone');
+const loading=$('loading'), lmsg=$('lmsg'), app=$('app');
+const metaStrip=$('meta-strip');
+const mainCanvasWrap=$('main-canvas-wrap'), mainCanvas=$('main-canvas');
+const minimapWrap=$('minimap-wrap'), minimapCanvas=$('minimap-canvas');
+const minimapSel=$('minimap-sel');
+const framesPanel=$('frames-panel'), framesTbody=$('frames-tbody');
+const decodeBtn=$('decode-btn');
+const summarySection=$('summary-section'), summaryContent=$('summary-content');
+const fileInfo=$('file-info');
+const pipelineStatus=$('pipeline-status');
+const cursorReadout=$('cursor-readout');
+const canvasTooltip=$('canvas-tooltip');
+const xhairV=$('xhair-v'), xhairH=$('xhair-h');
+const frameFilterBar=$('frame-filter-bar');
+const frameFilterId=$('frame-filter-id');
+const frameFilterStatus=$('frame-filter-status');
+const frameFilterType=$('frame-filter-type');
+const exportFramesBtn=$('export-frames-btn');
+const exportBitsBtn=$('export-bits-btn');
+const statusBar=$('status-bar');
+const sbPos=$('sb-pos'), sbZoom=$('sb-zoom');
+
+// ── Session management ──
+function makeSession(name){
+  return {
+    id: ++_sessionIdSeq, name: name||'Untitled',
+    fileText:'', meta:{}, sigNames:[], sigCount:0, visible:[], dataByteStart:0,
+    allLineOffsets:[], totalRows:0, chunkBoundaries:[], chunks:[],
+    globalYMin:Infinity, globalYMax:-Infinity,
+    waveData:null, waveRowStart:0, waveRowEnd:0,
+    zoomState:{1:{tMin:null,tMax:null},2:{tMin:null,tMax:null},3:{tMin:null,tMax:null},4:{tMin:null,tMax:null}},
+    canHIdx:0, canLIdx:1, canBitRate:500000, canThreshold:0.7, canHysteresis:0.1,
+    diffData:null, canSegments:[], canBits:[], canBitsDestuffed:[], stuffPositions:[], stuffErrors:[],
+    canFrames:[], pipelineStep:1, pipelineComplete:[true,false,false,false], selectedFrameIdx:-1,
+  };
+}
+
+function saveCurrent(s){
+  if(!s) return;
+  s.fileText=fileText; s.meta=meta; s.sigNames=sigNames; s.sigCount=sigCount;
+  s.visible=visible; s.dataByteStart=dataByteStart;
+  s.allLineOffsets=allLineOffsets; s.totalRows=totalRows;
+  s.chunkBoundaries=chunkBoundaries; s.chunks=chunks;
+  s.globalYMin=globalYMin; s.globalYMax=globalYMax;
+  s.waveData=waveData; s.waveRowStart=waveRowStart; s.waveRowEnd=waveRowEnd;
+  s.zoomState=zoomState;
+  s.canHIdx=canHIdx; s.canLIdx=canLIdx;
+  s.canBitRate=canBitRate; s.canThreshold=canThreshold; s.canHysteresis=canHysteresis;
+  s.diffData=diffData; s.canSegments=canSegments;
+  s.canBits=canBits; s.canBitsDestuffed=canBitsDestuffed;
+  s.stuffPositions=stuffPositions; s.stuffErrors=stuffErrors;
+  s.canFrames=canFrames;
+  s.pipelineStep=pipelineStep; s.pipelineComplete=[...pipelineComplete];
+  s.selectedFrameIdx=selectedFrameIdx;
+}
+
+function loadInto(s){
+  if(!s) return;
+  fileText=s.fileText; meta=s.meta; sigNames=s.sigNames; sigCount=s.sigCount;
+  visible=s.visible; dataByteStart=s.dataByteStart;
+  allLineOffsets=s.allLineOffsets; totalRows=s.totalRows;
+  chunkBoundaries=s.chunkBoundaries; chunks=s.chunks;
+  globalYMin=s.globalYMin; globalYMax=s.globalYMax;
+  waveData=s.waveData; waveRowStart=s.waveRowStart; waveRowEnd=s.waveRowEnd;
+  zoomState=s.zoomState;
+  canHIdx=s.canHIdx; canLIdx=s.canLIdx;
+  canBitRate=s.canBitRate; canThreshold=s.canThreshold; canHysteresis=s.canHysteresis;
+  diffData=s.diffData; canSegments=s.canSegments;
+  canBits=s.canBits; canBitsDestuffed=s.canBitsDestuffed;
+  stuffPositions=s.stuffPositions; stuffErrors=s.stuffErrors;
+  canFrames=s.canFrames;
+  pipelineStep=s.pipelineStep; pipelineComplete=[...s.pipelineComplete];
+  selectedFrameIdx=s.selectedFrameIdx;
+}
+
+function currentSession(){ return sessions.find(s=>s.id===currentSessionId)||null; }
+
+function clearGlobals(){
+  fileText=''; meta={}; sigNames=[]; sigCount=0; visible=[]; dataByteStart=0;
+  allLineOffsets=[]; totalRows=0; chunkBoundaries=[]; chunks=[];
+  globalYMin=Infinity; globalYMax=-Infinity;
+  waveData=null; waveRowStart=0; waveRowEnd=0;
+  zoomState={1:{tMin:null,tMax:null},2:{tMin:null,tMax:null},3:{tMin:null,tMax:null},4:{tMin:null,tMax:null}};
+  diffData=null; canSegments=[]; canBits=[]; canBitsDestuffed=[]; stuffPositions=[]; stuffErrors=[];
+  canFrames=[]; pipelineStep=1; pipelineComplete=[true,false,false,false]; selectedFrameIdx=-1;
+}
+
+// ── Tab rendering ──
+function renderTabs(){
+  const strip=$('tab-strip');
+  strip.innerHTML='';
+  if(sessions.length===0){ strip.classList.remove('show'); return; }
+  strip.classList.add('show');
+  sessions.forEach(s=>{
+    const tab=document.createElement('div');
+    tab.className='tab'+(s.id===currentSessionId?' active':'');
+    tab.title=s.name;
+    tab.innerHTML=`<span class="tab-name">${escapeHtml(s.name)}</span>
+      <span class="tab-close" title="Close">&times;</span>`;
+    tab.addEventListener('click',ev=>{
+      if(ev.target.classList.contains('tab-close')){
+        ev.stopPropagation();
+        closeSessionById(s.id);
+      } else {
+        switchToSession(s.id);
+      }
+    });
+    strip.appendChild(tab);
+  });
+  const newBtn=document.createElement('div');
+  newBtn.className='tab-newbtn'; newBtn.textContent='+';
+  newBtn.title='Open another file';
+  newBtn.addEventListener('click',()=>fileInput.click());
+  strip.appendChild(newBtn);
+}
+
+function switchToSession(id){
+  if(id===currentSessionId) return;
+  if(loading.classList.contains('show')) return;
+  const target=sessions.find(s=>s.id===id);
+  if(!target) return;
+  const cur=currentSession();
+  if(cur) saveCurrent(cur);
+  currentSessionId=target.id;
+  loadInto(target);
+  rebuildUI();
+  renderTabs();
+}
+
+function closeSessionById(id){
+  if(id===currentSessionId){ closeCurrentFile(); return; }
+  if(loading.classList.contains('show')) return;
+  const idx=sessions.findIndex(s=>s.id===id);
+  if(idx<0) return;
+  sessions.splice(idx,1);
+  renderTabs();
+}
+
+function closeCurrentFile(){
+  if(loading.classList.contains('show')) return;
+  const cur=currentSession();
+  if(!cur){ setView('drop'); renderTabs(); return; }
+  const idx=sessions.indexOf(cur);
+  sessions.splice(idx,1);
+  if(sessions.length===0){
+    currentSessionId=null; clearGlobals();
+    metaStrip.innerHTML=''; fileInfo.textContent='';
+    setView('drop'); renderTabs(); return;
+  }
+  const next=sessions[Math.max(0,idx-1)]||sessions[0];
+  currentSessionId=next.id;
+  loadInto(next);
+  rebuildUI();
+  renderTabs();
+}
+
+// ── View state ──
+function setView(v,msg){
+  dropZone.style.display='none';
+  loading.classList.remove('show');
+  app.classList.remove('show');
+  const closeBtn=$('close-btn');
+  if(closeBtn) closeBtn.style.display=(v==='app')?'':'none';
+  if(v==='drop') dropZone.style.display='';
+  else if(v==='loading'){loading.classList.add('show');if(msg)lmsg.textContent=msg;}
+  else if(v==='app') app.classList.add('show');
+  renderTabs();
+}
+
+// ── Parse CSV (reused from signal-viewer) ──
+function parseLine(str,start,end,tArr,cArr,rowIdx){
+  if(end<=start) return;
+  let le=end; if(str[le-1]==='\r') le--;
+  if(le<=start) return;
+
+  if(meta._tekCol){
+    const tc=meta._tekTimeCol, vcs=meta._tekValCols;
+    let col=0, cs=start, t=NaN;
+    const vals=new Array(vcs.length).fill(NaN);
+    for(let i=start;i<=le;i++){
+      if(i===le||str[i]===','){
+        if(col===tc) t=parseFloat(str.slice(cs,i));
+        else { const vi=vcs.indexOf(col); if(vi>=0) vals[vi]=parseFloat(str.slice(cs,i)); }
+        col++; cs=i+1;
+      }
+    }
+    if(isNaN(t)) return;
+    tArr.push(t);
+    for(let k=0;k<vcs.length;k++){ if(k<cArr.length) cArr[k].push(isNaN(vals[k])?0:vals[k]); }
+  } else if(meta._yokogawa){
+    const ri=(rowIdx!==undefined)?rowIdx:tArr.length;
+    const t=meta._yokoHOffset + ri * meta._yokoHRes;
+    let ci=0, cs=start;
+    for(let i=start;i<=le;i++){
+      if(i===le||str[i]===','){
+        if(i>cs){
+          const v=parseFloat(str.slice(cs,i));
+          if(ci===0 && isNaN(v)) return;
+          if(ci<cArr.length) cArr[ci].push(isNaN(v)?0:v);
+          ci++;
+        }
+        cs=i+1;
+      }
+    }
+    if(ci>0) tArr.push(t);
+  } else {
+    let col=0,cs=start;
+    for(let i=start;i<=le;i++){
+      if(i===le||str[i]===','){
+        const v=parseFloat(str.slice(cs,i));
+        if(col===0){if(isNaN(v))return; tArr.push(v);}
+        else if(col<=cArr.length) cArr[col-1].push(isNaN(v)?0:v);
+        col++; cs=i+1;
+        if(col>cArr.length) break;
+      }
+    }
+  }
+}
+
+function processFile(){
+  setView('loading','Parsing header...');
+  meta={}; sigNames=[]; sigCount=0;
+  const TEK={'model':'model','model number':'model','firmware version':'firmware',
+    'horizontal units':'xUnit','sample interval':'sampleInterval',
+    'vertical units':'yUnit','vertical scale':'yScale'};
+
+  let isYokogawa=false, yokoHeaderSize=0, yokoHRes=0, yokoHOffset=0;
+  let pos=0;
+
+  const preLines=fileText.slice(0,Math.min(fileText.length,12000)).split('\n');
+  for(const raw of preLines){
+    const line=raw.replace(/\r$/,'');
+    const m=line.match(/^"Header Size"\s*,\s*(\d+)/i);
+    if(m){ isYokogawa=true; yokoHeaderSize=parseInt(m[1]); break; }
+  }
+
+  if(isYokogawa){
+    const hdrLines=preLines.slice(0,yokoHeaderSize);
+    const strip=s=>s.trim().replace(/^"|"$/g,'').trim();
+    for(const raw of hdrLines){
+      const line=raw.replace(/\r$/,'');
+      const cells=line.split(',');
+      const key=strip(cells[0]).toLowerCase();
+      if(key==='model name')    meta.model=strip(cells[1]);
+      if(key==='tracename'){
+        sigNames=cells.slice(1).map(c=>strip(c)).filter(Boolean).slice(0,4);
+        sigCount=sigNames.length;
+      }
+      if(key==='hresolution')   { yokoHRes=parseFloat(cells[1])||0; meta.sampleInterval=String(yokoHRes); }
+      if(key==='samplerate'){
+        const sr=parseFloat(cells[1])||0;
+        if(sr>0 && !yokoHRes){ yokoHRes=1/sr; meta.sampleInterval=String(yokoHRes); }
+        meta._sampleRate=sr;
+      }
+      if(key==='hoffset')       yokoHOffset=parseFloat(cells[1])||0;
+      if(key==='vunit'){
+        const units=cells.slice(1).map(c=>strip(c)).filter(Boolean);
+        meta.yUnit=units[0]||'V';
+        meta._yUnits=units;
+      }
+      if(key==='hunit')         meta.xUnit=strip(cells[1]);
+      if(key==='blocksize'){
+        const bs=parseFloat(cells[1])||0;
+        if(bs>0) meta._blockSize=bs;
+      }
+      if(key==='date')          meta._date=strip(cells[1]);
+      if(key==='time')          meta._time=strip(cells[1]);
+    }
+    pos=0;
+    for(let h=0;h<yokoHeaderSize;h++){
+      const nl=fileText.indexOf('\n',pos);
+      if(nl===-1){pos=fileText.length;break;}
+      pos=nl+1;
+    }
+    dataByteStart=pos;
+    meta._yokogawa=true;
+    meta._yokoHRes=yokoHRes;
+    meta._yokoHOffset=yokoHOffset;
+  } else {
+    const preTek=fileText.slice(0,Math.min(fileText.length,8000)).split('\n')
+                         .map(l=>l.replace(/\r$/,''));
+    let hasTimeHeader=false;
+    for(const l of preTek){ if(/^\s*time\s*$/i.test(l.split(',')[0])){ hasTimeHeader=true; break; } }
+
+    if(hasTimeHeader){
+      pos=0;
+      while(pos<Math.min(fileText.length,8000)){
+        const nl=fileText.indexOf('\n',pos);
+        const le=nl===-1?fileText.length:nl;
+        const line=fileText.slice(pos,le).replace(/\r$/,'');
+        const cells=line.split(',');
+        const c0=cells[0].trim();
+        if(/^time$/i.test(c0)){
+          sigNames=cells.slice(1).map(c=>c.trim()).filter(Boolean).slice(0,4);
+          sigCount=sigNames.length;
+          dataByteStart=le+1;
+          break;
+        }
+        if(cells.length>=2){const k=c0.toLowerCase();if(TEK[k])meta[TEK[k]]=cells[1].trim();}
+        if(nl===-1)break;
+        pos=nl+1;
+      }
+    } else {
+      const cellNum=(lineStr,colIdx)=>{
+        let col=0,cs=0;
+        for(let i=0;i<=lineStr.length;i++){
+          if(i===lineStr.length||lineStr[i]===','){
+            if(col===colIdx) return parseFloat(lineStr.slice(cs,i));
+            col++; cs=i+1;
+          }
+        }
+        return NaN;
+      };
+      let chName='', timeCol=-1, valCols=[];
+      for(const line of preTek){
+        const cells=line.split(',');
+        const key=(cells[0]||'').trim().toLowerCase();
+        const val=(cells[1]||'').trim();
+        if(key && val){
+          if(TEK[key]) meta[TEK[key]]=val;
+          if(key==='source') chName=val;
+        }
+        if(timeCol===-1 && (cells[0]||'').trim()===''){
+          const nums=[];
+          for(let c=0;c<cells.length;c++){
+            const v=parseFloat(cells[c]);
+            if(isFinite(v) && cells[c].trim()!=='') nums.push(c);
+          }
+          if(nums.length>=2){ timeCol=nums[0]; valCols=nums.slice(1,5); }
+        }
+      }
+      if(timeCol===-1){
+        for(const line of preTek){
+          const cells=line.split(',');
+          const nums=[];
+          for(let c=0;c<cells.length;c++){
+            const v=parseFloat(cells[c]);
+            if(isFinite(v) && cells[c].trim()!=='') nums.push(c);
+          }
+          if(nums.length>=2){ valCols=[nums[nums.length-1]]; timeCol=nums[nums.length-2]; break; }
+        }
+      }
+      if(timeCol>=0){
+        let t0=cellNum(preTek[0],timeCol);
+        const t1=cellNum(preTek[1]!==undefined?preTek[1]:'',timeCol);
+        let dt=(isFinite(t0)&&isFinite(t1))?(t1-t0):(parseFloat(meta.sampleInterval)||0);
+        if(!isFinite(t0)) t0=0;
+        if(!dt) dt=parseFloat(meta.sampleInterval)||0;
+        meta._tekCol=true;
+        meta._tekTimeCol=timeCol;
+        meta._tekValCols=valCols;
+        meta._tekT0=t0;
+        meta._tekDt=dt;
+        if(!meta.sampleInterval && dt) meta.sampleInterval=String(dt);
+        sigNames=valCols.map((_,k)=> (k===0 && chName) ? chName : 'CH'+(k+1));
+        sigCount=sigNames.length;
+        dataByteStart=0;
+      }
+    }
+  }
+
+  if(!sigCount){
+    alert('Cannot find channel headers.');
+    const cur=currentSession();
+    if(cur){ const i=sessions.indexOf(cur); if(i>=0) sessions.splice(i,1); }
+    currentSessionId=sessions.length?sessions[sessions.length-1].id:null;
+    if(currentSessionId){ loadInto(currentSession()); rebuildUI(); }
+    else { clearGlobals(); setView('drop'); }
+    renderTabs(); return;
+  }
+  visible=sigNames.map(()=>true);
+  setTimeout(indexFile,10);
+}
+
+// ── Index newlines (chunked) ──
+function indexFile(){
+  allLineOffsets=[]; chunkBoundaries=[0];
+  let pos=dataByteStart, count=0;
+  const TICK=4000000;
+  function run(){
+    const end=Math.min(pos+TICK,fileText.length);
+    while(pos<end){
+      allLineOffsets.push(pos);
+      const nl=fileText.indexOf('\n',pos);
+      if(nl===-1){count++; pos=fileText.length;break;}
+      count++; pos=nl+1;
+      if(count%CHUNK_ROWS===0) chunkBoundaries.push(count);
+    }
+    if(pos<fileText.length){
+      setView('loading',`Scanning... ${Math.round(pos/fileText.length*100)}%`);
+      setTimeout(run,0);
+    } else {
+      totalRows=count;
+      buildPreviews();
+    }
+  }
+  run();
+}
+
+function sampleRows(rowStart, rowEnd, maxPts){
+  const rows=rowEnd-rowStart;
+  const step=Math.max(1,Math.floor(rows/maxPts));
+  const time=[],chs=Array.from({length:sigCount},()=>[]);
+  for(let li=0;li<rows;li+=step){
+    const ri=rowStart+li;
+    if(ri>=allLineOffsets.length) break;
+    const pos=allLineOffsets[ri];
+    const nl=fileText.indexOf('\n',pos);
+    parseLine(fileText,pos,nl===-1?fileText.length:nl,time,chs,ri);
+  }
+  return {time,chs};
+}
+
+function buildPreviews(){
+  chunks=[];
+  const n=chunkBoundaries.length;
+  let ci=0;
+  function next(){
+    if(ci>=n){finalize();return;}
+    const rowStart=chunkBoundaries[ci];
+    const rowEnd=ci+1<n?chunkBoundaries[ci+1]:totalRows;
+    const bStart=allLineOffsets[rowStart];
+    const bEnd=rowEnd<totalRows?allLineOffsets[rowEnd]:fileText.length;
+    const {time,chs}=sampleRows(rowStart,rowEnd,PREVIEW_PTS);
+    if(time.length){
+      chunks.push({byteStart:bStart,byteEnd:bEnd,rowStart,rowEnd,
+        tMin:time[0],tMax:time[time.length-1],pTime:time,pChs:chs});
+    }
+    ci++;
+    setView('loading',`Preview ${ci}/${n}...`);
+    setTimeout(next,0);
+  }
+  next();
+}
+
+function finalize(){
+  globalYMin=Infinity; globalYMax=-Infinity;
+  chunks.forEach(c=>c.pChs.forEach(ch=>ch.forEach(v=>{
+    if(!isNaN(v)){if(v<globalYMin)globalYMin=v;if(v>globalYMax)globalYMax=v;}
+  })));
+  const pad=(globalYMax-globalYMin)*0.06;
+  globalYMin-=pad; globalYMax+=pad;
+
+  // Auto-load first portion of data
+  const loadEnd=Math.min(totalRows, AUTO_LOAD_MAX);
+  loadWaveData(0, loadEnd);
+}
+
+function loadWaveData(rowStart, rowEnd){
+  setView('loading',`Loading ${(rowEnd-rowStart).toLocaleString()} rows...`);
+  setTimeout(()=>{
+    const time=[],chs=Array.from({length:sigCount},()=>[]);
+    for(let ri=rowStart;ri<rowEnd;ri++){
+      if(ri>=allLineOffsets.length) break;
+      const pos=allLineOffsets[ri];
+      const nl=fileText.indexOf('\n',pos);
+      parseLine(fileText,pos,nl===-1?fileText.length:nl,time,chs,ri);
+    }
+    waveData={time,chs};
+    waveRowStart=rowStart;
+    waveRowEnd=rowEnd;
+
+    // Reset zoom for step 1
+    if(time.length){
+      zoomState[1]={tMin:time[0],tMax:time[time.length-1]};
+    }
+
+    // Reset decode state
+    diffData=null; canSegments=[]; canBits=[]; canBitsDestuffed=[];
+    stuffPositions=[]; stuffErrors=[]; canFrames=[];
+    pipelineComplete=[true,false,false,false];
+    pipelineStep=1; selectedFrameIdx=-1;
+
+    rebuildUI();
+    setView('app');
+  },20);
+}
+
+// ── Rebuild UI from current state ──
+function rebuildUI(){
+  if(!sigNames.length){ setView('drop'); return; }
+
+  // Meta strip
+  buildMetaStrip();
+  // File info
+  buildFileInfo();
+  // Populate channel selects
+  populateChannelSelects();
+  // Update pipeline UI
+  updatePipelineUI();
+  // Summary
+  updateSummary();
+  // Minimap
+  drawMinimap();
+  // Main canvas
+  drawMainCanvas();
+  // Frames table
+  renderFrameTable();
+
+  decodeBtn.disabled=false;
+  setView('app');
+}
+
+function buildMetaStrip(){
+  const p=[];
+  if(meta.model) p.push(`<span>Model <b>${meta.model}</b></span>`);
+  if(meta.sampleInterval){
+    const si=parseFloat(meta.sampleInterval);
+    p.push(`<span>&Delta;t <b>${formatSI(si)}${meta.xUnit||'s'}</b></span>`);
+    p.push(`<span>fs <b>${formatSI(1/si)}Hz</b></span>`);
+  }
+  p.push(`<span>Rows <b>${totalRows.toLocaleString()}</b></span>`);
+  if(waveData) p.push(`<span>Loaded <b>${waveData.time.length.toLocaleString()}</b> pts</span>`);
+  metaStrip.innerHTML=p.join('');
+}
+
+function buildFileInfo(){
+  const lines=[];
+  lines.push(`Channels: ${sigNames.join(', ')}`);
+  if(meta.sampleInterval){
+    const si=parseFloat(meta.sampleInterval);
+    lines.push(`Sample rate: ${formatSI(1/si)}Hz`);
+    lines.push(`Interval: ${formatSI(si)}${meta.xUnit||'s'}`);
+  }
+  lines.push(`Total rows: ${totalRows.toLocaleString()}`);
+  if(waveData){
+    lines.push(`Loaded: ${waveData.time.length.toLocaleString()} pts`);
+    lines.push(`Range: ${formatSI(waveData.time[0])}${meta.xUnit||'s'} - ${formatSI(waveData.time[waveData.time.length-1])}${meta.xUnit||'s'}`);
+  }
+  fileInfo.innerHTML=lines.join('<br>');
+}
+
+function populateChannelSelects(){
+  const selH=$('sel-canh'), selL=$('sel-canl');
+  selH.innerHTML=''; selL.innerHTML='';
+  sigNames.forEach((name,i)=>{
+    selH.innerHTML+=`<option value="${i}" ${i===canHIdx?'selected':''}>${name}</option>`;
+    selL.innerHTML+=`<option value="${i}" ${i===canLIdx?'selected':''}>${name}</option>`;
+  });
+  // Auto-detect: if names contain CAN_H / CAN_L or similar
+  sigNames.forEach((name,i)=>{
+    const n=name.toLowerCase();
+    if(n.includes('can_h')||n.includes('canh')||n.includes('can h')) { canHIdx=i; selH.value=i; }
+    if(n.includes('can_l')||n.includes('canl')||n.includes('can l')) { canLIdx=i; selL.value=i; }
+  });
+  // If only 2 channels, default first=H second=L
+  if(sigCount===2){ canHIdx=0; canLIdx=1; selH.value=0; selL.value=1; }
+}
+
+// ── Pipeline UI ──
+function updatePipelineUI(){
+  document.querySelectorAll('.pipe-step').forEach(el=>{
+    const step=parseInt(el.dataset.step);
+    el.classList.toggle('active', step===pipelineStep);
+    el.classList.toggle('done', pipelineComplete[step-1]);
+    el.classList.toggle('disabled', step>1 && !pipelineComplete[step-1] && step!==pipelineStep);
+    // Enable steps that are completed
+    if(pipelineComplete[step-1]) el.classList.remove('disabled');
+  });
+  // Show frames panel on step 4 or when frames exist
+  framesPanel.classList.toggle('show', canFrames.length>0);
+  // Minimap
+  minimapWrap.classList.toggle('show', waveData!==null && waveData.time.length>0);
+}
+
+// ── Pipeline step click ──
+document.querySelectorAll('.pipe-step').forEach(el=>{
+  el.addEventListener('click',()=>{
+    const step=parseInt(el.dataset.step);
+    if(el.classList.contains('disabled')) return;
+    if(!pipelineComplete[step-1] && step>1) return;
+    pipelineStep=step;
+    updatePipelineUI();
+    drawMainCanvas();
+  });
+});
+
+// ── Config event handlers ──
+$('sel-canh').addEventListener('change',e=>{ canHIdx=parseInt(e.target.value); });
+$('sel-canl').addEventListener('change',e=>{ canLIdx=parseInt(e.target.value); });
+$('sel-bitrate').addEventListener('change',e=>{
+  if(e.target.value==='custom'){
+    $('custom-rate-row').style.display='flex';
+  } else {
+    $('custom-rate-row').style.display='none';
+    canBitRate=parseInt(e.target.value);
+  }
+});
+$('inp-custom-rate').addEventListener('input',e=>{ canBitRate=parseInt(e.target.value)||500000; });
+$('inp-threshold').addEventListener('input',e=>{ canThreshold=parseFloat(e.target.value)||0.7; });
+$('inp-hysteresis').addEventListener('input',e=>{ canHysteresis=parseFloat(e.target.value)||0.1; });
+
+// ── DECODE BUTTON ──
+decodeBtn.addEventListener('click',()=>{
+  if(!waveData) return;
+  decodeBtn.disabled=true;
+  decodeBtn.textContent='Decoding...';
+  pipelineStatus.textContent='Running pipeline...';
+  setTimeout(runDecode, 20);
+});
+
+function runDecode(){
+  try {
+    // Read config from UI
+    canHIdx=parseInt($('sel-canh').value);
+    canLIdx=parseInt($('sel-canl').value);
+    const brSel=$('sel-bitrate').value;
+    canBitRate= brSel==='custom' ? (parseInt($('inp-custom-rate').value)||500000) : parseInt(brSel);
+    canThreshold=parseFloat($('inp-threshold').value)||0.7;
+    canHysteresis=parseFloat($('inp-hysteresis').value)||0.1;
+
+    const time=waveData.time;
+    const canH=waveData.chs[canHIdx];
+    const canL=waveData.chs[canLIdx];
+
+    if(!canH||!canL||canH.length===0){
+      alert('Selected channels have no data.');
+      decodeBtn.disabled=false; decodeBtn.textContent='Decode'; return;
+    }
+
+    // Step 1: already have raw (always complete)
+    pipelineComplete[0]=true;
+
+    // Step 2: Differential
+    pipelineStatus.textContent='Computing differential...';
+    diffData=computeDifferential(time,canH,canL);
+    pipelineComplete[1]=true;
+
+    // Step 2b: Schmitt trigger
+    pipelineStatus.textContent='Applying Schmitt trigger...';
+    canSegments=applyCanSchmitt(diffData.time,diffData.diff,canThreshold,canHysteresis);
+
+    // Step 3: Bit sampling
+    pipelineStatus.textContent='Sampling bits...';
+    canBits=sampleBitsFromSegments(canSegments,canBitRate);
+
+    // Step 3b: Destuffing
+    pipelineStatus.textContent='Removing stuff bits...';
+    const destuffResult=destuff(canBits);
+    canBitsDestuffed=destuffResult.data;
+    stuffPositions=destuffResult.stuffPositions;
+    stuffErrors=destuffResult.errors;
+    pipelineComplete[2]=true;
+
+    // Step 4: Frame parsing
+    pipelineStatus.textContent='Finding frames...';
+    const frameRanges=findFrames(canBitsDestuffed);
+
+    pipelineStatus.textContent='Parsing frames...';
+    canFrames=[];
+    for(const range of frameRanges){
+      const frame=parseFrame(canBitsDestuffed,range.start,range.end);
+      if(frame){
+        validateFrame(frame);
+        canFrames.push(frame);
+      }
+    }
+    pipelineComplete[3]=true;
+
+    // Set zoom for each step
+    if(diffData.time.length){
+      const t0=diffData.time[0], t1=diffData.time[diffData.time.length-1];
+      zoomState[2]={tMin:t0,tMax:t1};
+    }
+    if(canBits.length){
+      // Zoom to show first few hundred bits
+      const showBits=Math.min(canBits.length, 200);
+      zoomState[3]={tMin:canBits[0].bitStart, tMax:canBits[Math.min(showBits-1,canBits.length-1)].bitEnd};
+    }
+    if(canFrames.length){
+      // Zoom to first frame
+      const f0=canFrames[0];
+      const fEnd=canFrames.length>1?canFrames[Math.min(2,canFrames.length-1)]:f0;
+      zoomState[4]={tMin:f0.tStart, tMax:fEnd.tEnd};
+    }
+
+    // Switch to step 4
+    pipelineStep=4;
+    selectedFrameIdx=-1;
+
+    pipelineStatus.textContent=`Done: ${canFrames.length} frame${canFrames.length!==1?'s':''} decoded`;
+
+  } catch(err){
+    pipelineStatus.textContent='Error: '+err.message;
+    console.error(err);
+  }
+
+  decodeBtn.disabled=false;
+  decodeBtn.textContent='Decode';
+  updatePipelineUI();
+  updateSummary();
+  drawMainCanvas();
+  renderFrameTable();
+}
+
+// ============================================================================
+// CAN DECODE FUNCTIONS
+// ============================================================================
+
+// Step 2: Compute differential
+function computeDifferential(time,canH,canL){
+  const len=Math.min(time.length,canH.length,canL.length);
+  const t=new Array(len), d=new Array(len);
+  for(let i=0;i<len;i++){
+    t[i]=time[i];
+    d[i]=canH[i]-canL[i];
+  }
+  return {time:t, diff:d};
+}
+
+// Step 2b: Schmitt trigger on differential
+function applyCanSchmitt(time,diff,threshold,hysteresis){
+  const segments=[];
+  if(time.length===0) return segments;
+
+  const hiThresh=threshold+hysteresis;
+  const loThresh=threshold-hysteresis;
+
+  // Find initial state
+  let state=null; // 'D'=dominant (diff>hi), 'R'=recessive (diff<lo)
+  for(let i=0;i<diff.length;i++){
+    if(diff[i]>=hiThresh){ state='D'; break; }
+    if(diff[i]<=loThresh){ state='R'; break; }
+  }
+  if(state===null) state='R'; // default recessive if never crosses
+
+  let segStart=time[0];
+
+  for(let i=1;i<time.length;i++){
+    let next=state;
+    if(state==='D' && diff[i]<=loThresh) next='R';
+    else if(state==='R' && diff[i]>=hiThresh) next='D';
+
+    if(next!==state){
+      segments.push({state, tStart:segStart, tEnd:time[i], dur:time[i]-segStart});
+      state=next;
+      segStart=time[i];
+    }
+  }
+  // Final segment
+  segments.push({state, tStart:segStart, tEnd:time[time.length-1], dur:time[time.length-1]-segStart});
+  return segments;
+}
+
+// Step 3: Sample bits from segments
+function sampleBitsFromSegments(segments,bitRate){
+  const bits=[];
+  if(segments.length===0) return bits;
+
+  const bitPeriod=1.0/bitRate;
+
+  // Find SOF: first dominant segment after recessive idle (at least 3 bit periods of recessive)
+  let sofIdx=-1;
+  const idleThresh=bitPeriod*3;
+  for(let i=0;i<segments.length;i++){
+    if(segments[i].state==='R' && segments[i].dur>=idleThresh){
+      // Look for next dominant
+      for(let j=i+1;j<segments.length;j++){
+        if(segments[j].state==='D'){
+          sofIdx=j;
+          break;
+        }
+      }
+      if(sofIdx>=0) break;
+    }
+  }
+
+  // If no idle found, try first dominant segment
+  if(sofIdx<0){
+    for(let i=0;i<segments.length;i++){
+      if(segments[i].state==='D'){ sofIdx=i; break; }
+    }
+  }
+  if(sofIdx<0) return bits;
+
+  // Sample bits starting from SOF
+  let sampleTime=segments[sofIdx].tStart + bitPeriod*0.5; // sample at center of first bit
+  let segI=sofIdx;
+  const endTime=segments[segments.length-1].tEnd;
+
+  // Build a flat lookup: for any time, what state are we in?
+  // We'll walk segments alongside sampling.
+  let maxBits=50000; // safety limit
+  let bitCount=0;
+  let lastEdgeTime=segments[sofIdx].tStart;
+
+  while(sampleTime<endTime && bitCount<maxBits){
+    // Advance segment index to cover sampleTime
+    while(segI<segments.length-1 && segments[segI].tEnd<=sampleTime){
+      // Edge resync: on R->D transitions, resync sample point
+      if(segments[segI].state==='R' && segI+1<segments.length && segments[segI+1].state==='D'){
+        const edgeTime=segments[segI].tEnd;
+        // Only resync if the edge is close to where we expect a bit boundary
+        const timeSinceLastEdge=edgeTime-lastEdgeTime;
+        const expectedBits=Math.round(timeSinceLastEdge/bitPeriod);
+        if(expectedBits>0){
+          lastEdgeTime=edgeTime;
+          // Resync: next sample at center of bit period from this edge
+          const nextSample=edgeTime+bitPeriod*0.5;
+          if(nextSample>sampleTime-bitPeriod*0.3){
+            sampleTime=nextSample;
+          }
+        }
+      }
+      segI++;
+    }
+
+    if(segI>=segments.length) break;
+
+    // Determine bit value at sampleTime
+    const seg=segments[segI];
+    if(sampleTime>=seg.tStart && sampleTime<=seg.tEnd){
+      const value=seg.state==='D'?0:1; // dominant=0, recessive=1
+      bits.push({
+        value,
+        time:sampleTime,
+        bitStart:sampleTime-bitPeriod*0.5,
+        bitEnd:sampleTime+bitPeriod*0.5
+      });
+    }
+
+    sampleTime+=bitPeriod;
+    bitCount++;
+
+    // Stop after extended recessive (bus idle) - 11+ recessive bits
+    if(bits.length>=11){
+      let recessiveCount=0;
+      for(let k=bits.length-1;k>=0&&k>=bits.length-20;k--){
+        if(bits[k].value===1) recessiveCount++;
+        else break;
+      }
+      // Don't stop early - keep sampling. We'll find frames in the bit stream.
+      // Only stop if we've had a very long idle (>50 recessive bits)
+      if(recessiveCount>=50) break;
+    }
+  }
+
+  return bits;
+}
+
+// Step 3b: Destuff
+function destuff(rawBits){
+  const data=[];
+  const stuffPositions=[];
+  const errors=[];
+
+  if(rawBits.length===0) return {data,stuffPositions,errors};
+
+  let consecutive=1;
+  let lastVal=rawBits[0].value;
+  data.push({...rawBits[0], originalIdx:0});
+  let inStuffRegion=true; // Stuffing applies SOF through CRC
+
+  for(let i=1;i<rawBits.length;i++){
+    const bit=rawBits[i];
+
+    if(!inStuffRegion){
+      data.push({...bit, originalIdx:i});
+      continue;
+    }
+
+    if(bit.value===lastVal){
+      consecutive++;
+      if(consecutive>5){
+        // 6 consecutive same bits: stuff error
+        errors.push({type:'STUFF_ERROR', bitIndex:i, time:bit.time,
+          message:`6 consecutive ${bit.value===0?'dominant':'recessive'} bits at ${formatSI(bit.time)}s`});
+        consecutive=1;
+      }
+      data.push({...bit, originalIdx:i});
+    } else {
+      if(consecutive===5){
+        // This bit is a stuff bit - skip it
+        stuffPositions.push(i);
+        consecutive=1;
+        lastVal=bit.value;
+        continue;
+      }
+      consecutive=1;
+      lastVal=bit.value;
+      data.push({...bit, originalIdx:i});
+    }
+  }
+
+  return {data, stuffPositions, errors};
+}
+
+// Step 4a: Find frame boundaries
+function findFrames(bitStream){
+  const frames=[];
+  let i=0;
+  while(i<bitStream.length){
+    // Look for SOF: a dominant bit (0) after idle (recessive bits)
+    // Skip recessive bits
+    while(i<bitStream.length && bitStream[i].value===1) i++;
+    if(i>=bitStream.length) break;
+
+    // Found a dominant bit - potential SOF
+    const start=i;
+
+    // Scan forward to find end of frame (EOF = 7 recessive bits) or next SOF
+    let recessiveRun=0;
+    let j=i+1;
+    while(j<bitStream.length){
+      if(bitStream[j].value===1){
+        recessiveRun++;
+        if(recessiveRun>=7){
+          // End of frame found
+          j++; // include last EOF bit
+          break;
+        }
+      } else {
+        recessiveRun=0;
+      }
+      j++;
+    }
+
+    // We need at least ~19 bits for a minimal frame (SOF+ID11+RTR+IDE+r0+DLC4+CRC15+CRCDEL+ACK+ACKDEL+EOF7 = 44 bits for 0-data)
+    if(j-start>=19){
+      frames.push({start, end:j});
+    }
+
+    i=j;
+  }
+  return frames;
+}
+
+// Step 4b: Parse a frame
+function parseFrame(bits,startIdx,endIdx){
+  const frame={
+    tStart: bits[startIdx]?bits[startIdx].bitStart:0,
+    tEnd: bits[endIdx-1]?bits[endIdx-1].bitEnd:0,
+    bitStart: startIdx,
+    bitEnd: endIdx,
+    isExtended: false,
+    id: 0,
+    rtr: 0,
+    dlc: 0,
+    dataBytes: [],
+    crcReceived: 0,
+    crcComputed: 0,
+    ackBit: 1,
+    errors: [],
+    fields: [], // {name, bitStart, bitEnd, color} for visualization
+  };
+
+  let pos=startIdx;
+  const getBit=(idx)=>idx<bits.length?bits[idx].value:1;
+  const getTime=(idx)=>idx<bits.length?bits[idx].time:0;
+
+  // SOF
+  if(pos>=endIdx) { frame.errors.push('TRUNCATED'); return frame; }
+  const sof=getBit(pos);
+  frame.fields.push({name:'SOF', start:pos, end:pos+1, color:FIELD_COLORS.SOF});
+  if(sof!==0) frame.errors.push('BAD_SOF');
+  pos++;
+
+  // ID[10:0] - 11 bits
+  if(pos+11>endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+  let idA=0;
+  for(let b=0;b<11;b++){
+    idA=(idA<<1)|getBit(pos+b);
+  }
+  frame.fields.push({name:'ID', start:pos, end:pos+11, color:FIELD_COLORS.ID});
+  pos+=11;
+
+  // RTR / SRR bit
+  if(pos>=endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+  const rtrSrr=getBit(pos);
+  pos++;
+
+  // IDE bit
+  if(pos>=endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+  const ide=getBit(pos);
+  pos++;
+
+  if(ide===1){
+    // Extended frame
+    frame.isExtended=true;
+    frame.fields.push({name:'SRR', start:pos-2, end:pos-1, color:FIELD_COLORS.SRR});
+    frame.fields.push({name:'IDE', start:pos-1, end:pos, color:FIELD_COLORS.IDE});
+
+    // ID_B[17:0] - 18 bits
+    if(pos+18>endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+    let idB=0;
+    for(let b=0;b<18;b++){
+      idB=(idB<<1)|getBit(pos+b);
+    }
+    frame.fields.push({name:'ID_B', start:pos, end:pos+18, color:FIELD_COLORS.ID});
+    pos+=18;
+
+    frame.id=(idA<<18)|idB;
+
+    // RTR
+    if(pos>=endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+    frame.rtr=getBit(pos);
+    frame.fields.push({name:'RTR', start:pos, end:pos+1, color:FIELD_COLORS.RTR});
+    pos++;
+
+    // r1
+    if(pos>=endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+    frame.fields.push({name:'r1', start:pos, end:pos+1, color:FIELD_COLORS.r1});
+    pos++;
+
+    // r0
+    if(pos>=endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+    frame.fields.push({name:'r0', start:pos, end:pos+1, color:FIELD_COLORS.r0});
+    pos++;
+  } else {
+    // Standard frame
+    frame.isExtended=false;
+    frame.id=idA;
+    frame.rtr=rtrSrr;
+    frame.fields.push({name:'RTR', start:pos-2, end:pos-1, color:FIELD_COLORS.RTR});
+    frame.fields.push({name:'IDE', start:pos-1, end:pos, color:FIELD_COLORS.IDE});
+
+    // r0
+    if(pos>=endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+    frame.fields.push({name:'r0', start:pos, end:pos+1, color:FIELD_COLORS.r0});
+    pos++;
+  }
+
+  // DLC - 4 bits
+  if(pos+4>endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+  let dlc=0;
+  for(let b=0;b<4;b++){
+    dlc=(dlc<<1)|getBit(pos+b);
+  }
+  frame.dlc=Math.min(dlc,8); // CAN max 8 bytes
+  frame.fields.push({name:'DLC', start:pos, end:pos+4, color:FIELD_COLORS.DLC});
+  pos+=4;
+
+  // Data - dlc * 8 bits
+  const dataBitCount=frame.dlc*8;
+  if(pos+dataBitCount>endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+  frame.dataBytes=[];
+  if(dataBitCount>0){
+    frame.fields.push({name:'DATA', start:pos, end:pos+dataBitCount, color:FIELD_COLORS.DATA});
+  }
+  for(let byteIdx=0;byteIdx<frame.dlc;byteIdx++){
+    let byte=0;
+    for(let b=0;b<8;b++){
+      byte=(byte<<1)|getBit(pos+byteIdx*8+b);
+    }
+    frame.dataBytes.push(byte);
+  }
+  pos+=dataBitCount;
+
+  // CRC region = SOF through end of data (for CRC computation)
+  const crcInputStart=startIdx; // SOF
+  const crcInputEnd=pos;         // end of data
+  const crcInputBits=[];
+  for(let k=crcInputStart;k<crcInputEnd;k++){
+    crcInputBits.push(getBit(k));
+  }
+  frame.crcComputed=computeCRC15(crcInputBits);
+
+  // CRC - 15 bits
+  if(pos+15>endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+  let crc=0;
+  for(let b=0;b<15;b++){
+    crc=(crc<<1)|getBit(pos+b);
+  }
+  frame.crcReceived=crc;
+  frame.fields.push({name:'CRC', start:pos, end:pos+15, color:FIELD_COLORS.CRC});
+  pos+=15;
+
+  // CRC delimiter
+  if(pos>=endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+  const crcDel=getBit(pos);
+  frame.fields.push({name:'CRC_DEL', start:pos, end:pos+1, color:FIELD_COLORS.CRC_DEL});
+  if(crcDel!==1) frame.errors.push('BAD_CRC_DEL');
+  pos++;
+
+  // ACK slot
+  if(pos>=endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+  frame.ackBit=getBit(pos);
+  const ackColor=frame.ackBit===0?FIELD_COLORS.ACK_OK:FIELD_COLORS.ACK_NO;
+  frame.fields.push({name:'ACK', start:pos, end:pos+1, color:ackColor});
+  pos++;
+
+  // ACK delimiter
+  if(pos>=endIdx){ frame.errors.push('TRUNCATED'); return frame; }
+  const ackDel=getBit(pos);
+  frame.fields.push({name:'ACK_DEL', start:pos, end:pos+1, color:FIELD_COLORS.ACK_DEL});
+  if(ackDel!==1) frame.errors.push('BAD_ACK_DEL');
+  pos++;
+
+  // EOF - 7 recessive bits
+  const eofStart=pos;
+  let eofCount=0;
+  for(let b=0;b<7&&pos<endIdx;b++){
+    if(getBit(pos)!==1) frame.errors.push('BAD_EOF');
+    eofCount++;
+    pos++;
+  }
+  if(eofCount>0){
+    frame.fields.push({name:'EOF', start:eofStart, end:eofStart+eofCount, color:FIELD_COLORS.EOF});
+  }
+  if(eofCount<7) frame.errors.push('TRUNCATED');
+
+  frame.tEnd=pos<bits.length?bits[pos-1].bitEnd:frame.tEnd;
+
+  return frame;
+}
+
+// CRC-15
+function computeCRC15(bits){
+  let crc=0;
+  for(const bit of bits){
+    const nxtbit=bit^((crc>>14)&1);
+    crc=((crc<<1)&0x7FFF)^(nxtbit?0x4599:0);
+  }
+  return crc;
+}
+
+// Validate frame
+function validateFrame(frame){
+  if(frame.crcReceived!==frame.crcComputed){
+    frame.errors.push('CRC_MISMATCH');
+  }
+  if(frame.ackBit!==0){
+    frame.errors.push('NO_ACK');
+  }
+}
+
+// Helper: bits to int
+function bitsToInt(bits,start,len){
+  let val=0;
+  for(let i=0;i<len;i++){
+    val=(val<<1)|(bits[start+i]?bits[start+i].value:0);
+  }
+  return val;
+}
+
+// ============================================================================
+// DRAWING FUNCTIONS
+// ============================================================================
+
+// ── Draw analog waveform (reused from signal-viewer) ──
+function drawSignal(ctx,W,H,time,chsArr,tMin,tMax,yMin,yMax,pad,axes,highlight){
+  const tc=themeColors();
+  ctx.fillStyle=tc.bg;
+  ctx.fillRect(0,0,W,H);
+
+  const pw=W-pad.l-pad.r;
+  const ph=H-pad.t-pad.b;
+  const tx=t=>pad.l+(t-tMin)/(tMax-tMin||1)*pw;
+
+  const visibleChs=chsArr.map((_,ci)=>visible[ci]).reduce((a,b)=>a+b,0);
+  const stacked=axes && visibleChs>=2;
+
+  if(stacked){
+    const laneGap=4;
+    const totalGaps=laneGap*(visibleChs-1);
+    const laneH=(ph-totalGaps)/visibleChs;
+
+    if(axes){
+      const xTicks=5;
+      for(let i=0;i<=xTicks;i++){
+        const t=tMin+(tMax-tMin)*i/xTicks;
+        const x=tx(t);
+        ctx.strokeStyle=tc.grid; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,H-pad.b); ctx.stroke();
+        ctx.fillStyle=tc.axis; ctx.font='9px JetBrains Mono';
+        ctx.textAlign='center'; ctx.fillText(formatSI(t)+(meta.xUnit||'s'),x,H-pad.b+11);
+      }
+    }
+
+    let laneIdx=0;
+    chsArr.forEach((ch,ci)=>{
+      if(!visible[ci]) return;
+      const laneTop=pad.t+laneIdx*(laneH+laneGap);
+      let cMin=Infinity, cMax=-Infinity;
+      for(let j=0;j<ch.length;j++){
+        const v=ch[j]; if(!isNaN(v)){if(v<cMin)cMin=v;if(v>cMax)cMax=v;}
+      }
+      if(!isFinite(cMin)){cMin=yMin;cMax=yMax;}
+      const cPad=(cMax-cMin)*0.08||0.01; cMin-=cPad; cMax+=cPad;
+      const tyL=v=>laneTop+(1-(v-cMin)/(cMax-cMin||1))*laneH;
+
+      if(laneIdx>0){
+        ctx.strokeStyle=tc.border; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(pad.l,laneTop-laneGap/2); ctx.lineTo(W-pad.r,laneTop-laneGap/2); ctx.stroke();
+      }
+      if(axes){
+        const yTicks=2;
+        ctx.strokeStyle=tc.grid; ctx.lineWidth=1;
+        for(let i=0;i<=yTicks;i++){
+          const v=cMin+(cMax-cMin)*i/yTicks;
+          const y=tyL(v);
+          ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+          ctx.fillStyle=tc.axis; ctx.font='8px JetBrains Mono';
+          ctx.textAlign='right'; ctx.fillText(v.toPrecision(3),pad.l-4,y+3);
+        }
+        ctx.fillStyle=CH_COLORS[ci]; ctx.font='bold 8px JetBrains Mono';
+        ctx.textAlign='left'; ctx.fillText(sigNames[ci]||('CH'+(ci+1)),pad.l+3,laneTop+9);
+      }
+      ctx.save();
+      ctx.beginPath(); ctx.rect(pad.l,laneTop,pw,laneH); ctx.clip();
+      ctx.strokeStyle=CH_COLORS[ci]; ctx.lineWidth=1.5;
+      ctx.beginPath();
+      let started=false;
+      for(let j=0;j<time.length;j++){
+        const x=tx(time[j]), y=tyL(ch[j]);
+        if(!started){ctx.moveTo(x,y);started=true;} else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+      ctx.restore();
+      laneIdx++;
+    });
+  } else {
+    const ty=v=>pad.t+(1-(v-yMin)/(yMax-yMin||1))*ph;
+    if(axes){
+      ctx.strokeStyle=tc.grid; ctx.lineWidth=1;
+      const yTicks=5;
+      for(let i=0;i<=yTicks;i++){
+        const v=yMin+(yMax-yMin)*i/yTicks;
+        const y=ty(v);
+        ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+        ctx.fillStyle=tc.axis; ctx.font='9px JetBrains Mono';
+        ctx.textAlign='right'; ctx.fillText(v.toPrecision(3),pad.l-4,y+3);
+      }
+      const xTicks=5;
+      for(let i=0;i<=xTicks;i++){
+        const t=tMin+(tMax-tMin)*i/xTicks;
+        const x=tx(t);
+        ctx.strokeStyle=tc.grid;
+        ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,H-pad.b); ctx.stroke();
+        ctx.fillStyle=tc.axis; ctx.font='9px JetBrains Mono';
+        ctx.textAlign='center'; ctx.fillText(formatSI(t)+(meta.xUnit||'s'),x,H-pad.b+11);
+      }
+    }
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.l,pad.t,pw,ph); ctx.clip();
+    chsArr.forEach((ch,ci)=>{
+      if(!visible[ci]) return;
+      ctx.strokeStyle=CH_COLORS[ci]; ctx.lineWidth=axes?1.5:1;
+      ctx.beginPath();
+      let started=false;
+      for(let j=0;j<time.length;j++){
+        const x=tx(time[j]), y=ty(ch[j]);
+        if(!started){ctx.moveTo(x,y);started=true;} else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  ctx.strokeStyle=highlight?CH_COLORS[0]:tc.border;
+  ctx.lineWidth=highlight?2:1;
+  ctx.strokeRect(pad.l,pad.t,pw,ph);
+}
+
+// ── Minimap ──
+function drawMinimap(){
+  if(!waveData||!waveData.time.length) return;
+  const wrap=minimapWrap;
+  const W=wrap.offsetWidth||800;
+  const H=40;
+  const ctx=setupCanvas(minimapCanvas,W,H);
+  const tc=themeColors();
+  ctx.fillStyle=tc.bg;
+  ctx.fillRect(0,0,W,H);
+
+  const time=waveData.time;
+  const tMin=time[0], tMax=time[time.length-1];
+
+  // Draw all channels as thin overlapped lines
+  const ph=H-4;
+  waveData.chs.forEach((ch,ci)=>{
+    if(!visible[ci]) return;
+    let cMin=Infinity,cMax=-Infinity;
+    // Sample for minimap
+    const step=Math.max(1,Math.floor(ch.length/W));
+    for(let i=0;i<ch.length;i+=step){
+      if(ch[i]<cMin)cMin=ch[i]; if(ch[i]>cMax)cMax=ch[i];
+    }
+    const cPad=(cMax-cMin)*0.05||0.01;
+    cMin-=cPad; cMax+=cPad;
+
+    ctx.strokeStyle=CH_COLORS[ci]; ctx.lineWidth=1; ctx.globalAlpha=0.6;
+    ctx.beginPath();
+    let started=false;
+    for(let i=0;i<time.length;i+=step){
+      const x=(time[i]-tMin)/(tMax-tMin)*W;
+      const y=2+(1-(ch[i]-cMin)/(cMax-cMin||1))*ph;
+      if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha=1.0;
+  });
+
+  // Update selection indicator
+  updateMinimapSel();
+}
+
+function updateMinimapSel(){
+  if(!waveData||!waveData.time.length) return;
+  const zs=zoomState[pipelineStep];
+  if(!zs||zs.tMin===null) return;
+  const time=waveData.time;
+  const tMin=time[0], tMax=time[time.length-1];
+  const W=minimapWrap.offsetWidth||800;
+
+  const left=((zs.tMin-tMin)/(tMax-tMin))*W;
+  const right=((zs.tMax-tMin)/(tMax-tMin))*W;
+  minimapSel.style.left=Math.max(0,left)+'px';
+  minimapSel.style.width=Math.max(2,right-left)+'px';
+}
+
+// ── Main canvas dispatcher ──
+function drawMainCanvas(){
+  if(!waveData) return;
+  const W=mainCanvasWrap.offsetWidth||800;
+  const H=mainCanvasWrap.offsetHeight||400;
+
+  switch(pipelineStep){
+    case 1: drawRawWaveform(W,H); break;
+    case 2: drawDifferential(W,H); break;
+    case 3: drawDigitalBits(W,H); break;
+    case 4: drawFrameStructure(W,H); break;
+  }
+  updateMinimapSel();
+}
+
+// ── Step 1: Raw waveform ──
+function drawRawWaveform(W,H){
+  const ctx=setupCanvas(mainCanvas,W,H);
+  const zs=zoomState[1];
+  if(!zs||zs.tMin===null) return;
+
+  const time=waveData.time;
+  const chs=waveData.chs;
+
+  // Filter to zoom window
+  const vTime=[],vChs=chs.map(()=>[]);
+  for(let i=0;i<time.length;i++){
+    if(time[i]>=zs.tMin&&time[i]<=zs.tMax){
+      vTime.push(time[i]);
+      chs.forEach((ch,ci)=>vChs[ci].push(ch[i]));
+    }
+  }
+
+  let yMin=Infinity,yMax=-Infinity;
+  vChs.forEach(ch=>ch.forEach(v=>{if(!isNaN(v)){if(v<yMin)yMin=v;if(v>yMax)yMax=v;}}));
+  if(!isFinite(yMin)){yMin=globalYMin;yMax=globalYMax;}
+  const yPad=(yMax-yMin)*0.08||0.1; yMin-=yPad; yMax+=yPad;
+
+  drawSignal(ctx,W,H,vTime,vChs,zs.tMin,zs.tMax,yMin,yMax,PAD,true,false);
+}
+
+// ── Step 2: Differential ──
+function drawDifferential(W,H){
+  const ctx=setupCanvas(mainCanvas,W,H);
+  const tc=themeColors();
+  ctx.fillStyle=tc.bg;
+  ctx.fillRect(0,0,W,H);
+
+  if(!diffData||!diffData.time.length) return;
+
+  const zs=zoomState[2];
+  if(!zs||zs.tMin===null) return;
+
+  const time=diffData.time, diff=diffData.diff;
+  const pw=W-PAD.l-PAD.r;
+  const ph=H-PAD.t-PAD.b;
+  const tx=t=>PAD.l+(t-zs.tMin)/(zs.tMax-zs.tMin||1)*pw;
+
+  // Filter to zoom window
+  const vTime=[],vDiff=[];
+  for(let i=0;i<time.length;i++){
+    if(time[i]>=zs.tMin&&time[i]<=zs.tMax){
+      vTime.push(time[i]); vDiff.push(diff[i]);
+    }
+  }
+
+  // Y range
+  let yMin=Infinity,yMax=-Infinity;
+  vDiff.forEach(v=>{if(v<yMin)yMin=v;if(v>yMax)yMax=v;});
+  if(!isFinite(yMin)){yMin=-1;yMax=5;}
+  const yPad=(yMax-yMin)*0.08||0.1;
+  yMin-=yPad; yMax+=yPad;
+  const ty=v=>PAD.t+(1-(v-yMin)/(yMax-yMin||1))*ph;
+
+  // Grid
+  const xTicks=6;
+  for(let i=0;i<=xTicks;i++){
+    const t=zs.tMin+(zs.tMax-zs.tMin)*i/xTicks;
+    const x=tx(t);
+    ctx.strokeStyle=tc.grid; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,PAD.t); ctx.lineTo(x,H-PAD.b); ctx.stroke();
+    ctx.fillStyle=tc.axis; ctx.font='9px JetBrains Mono'; ctx.textAlign='center';
+    ctx.fillText(formatSI(t)+(meta.xUnit||'s'),x,H-PAD.b+11);
+  }
+  const yTicks=5;
+  for(let i=0;i<=yTicks;i++){
+    const v=yMin+(yMax-yMin)*i/yTicks;
+    const y=ty(v);
+    ctx.strokeStyle=tc.grid; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(PAD.l,y); ctx.lineTo(W-PAD.r,y); ctx.stroke();
+    ctx.fillStyle=tc.axis; ctx.font='9px JetBrains Mono'; ctx.textAlign='right';
+    ctx.fillText(v.toPrecision(3),PAD.l-4,y+3);
+  }
+
+  // Threshold line
+  const thY=ty(canThreshold);
+  ctx.strokeStyle=CH_COLORS[2]; ctx.lineWidth=1; ctx.setLineDash([6,4]);
+  ctx.beginPath(); ctx.moveTo(PAD.l,thY); ctx.lineTo(W-PAD.r,thY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle=CH_COLORS[2]; ctx.font='9px JetBrains Mono'; ctx.textAlign='left';
+  ctx.fillText(`Thresh: ${canThreshold}V`,PAD.l+4,thY-4);
+
+  // D/R zone shading
+  const hiT=canThreshold+canHysteresis;
+  const loT=canThreshold-canHysteresis;
+  const hiY=ty(hiT), loY=ty(loT);
+  ctx.fillStyle=isDark?'rgba(0,229,255,0.05)':'rgba(8,145,178,0.06)';
+  ctx.fillRect(PAD.l,PAD.t,pw,hiY-PAD.t); // Dominant zone (above hi)
+  ctx.fillStyle=isDark?'rgba(255,79,123,0.04)':'rgba(225,29,72,0.04)';
+  ctx.fillRect(PAD.l,loY,pw,H-PAD.b-loY); // Recessive zone (below lo)
+
+  // Zone labels
+  ctx.font='bold 9px JetBrains Mono';
+  ctx.fillStyle=isDark?'rgba(0,229,255,0.4)':'rgba(8,145,178,0.5)';
+  ctx.textAlign='right';
+  ctx.fillText('DOMINANT',W-PAD.r-4,PAD.t+12);
+  ctx.fillStyle=isDark?'rgba(255,79,123,0.4)':'rgba(225,29,72,0.5)';
+  ctx.fillText('RECESSIVE',W-PAD.r-4,H-PAD.b-4);
+
+  // Draw diff trace
+  ctx.save();
+  ctx.beginPath(); ctx.rect(PAD.l,PAD.t,pw,ph); ctx.clip();
+  ctx.strokeStyle=CH_COLORS[0]; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  let started=false;
+  for(let j=0;j<vTime.length;j++){
+    const x=tx(vTime[j]), y=ty(vDiff[j]);
+    if(!started){ctx.moveTo(x,y);started=true;} else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Border
+  ctx.strokeStyle=tc.border; ctx.lineWidth=1;
+  ctx.strokeRect(PAD.l,PAD.t,pw,ph);
+}
+
+// ── Step 3: Digital bits ──
+function drawDigitalBits(W,H){
+  const ctx=setupCanvas(mainCanvas,W,H);
+  const tc=themeColors();
+  ctx.fillStyle=tc.bg;
+  ctx.fillRect(0,0,W,H);
+
+  if(!canBits.length) return;
+
+  const zs=zoomState[3];
+  if(!zs||zs.tMin===null) return;
+
+  const pw=W-PAD.l-PAD.r;
+  const ph=H-PAD.t-PAD.b;
+  const tx=t=>PAD.l+(t-zs.tMin)/(zs.tMax-zs.tMin||1)*pw;
+
+  // X axis
+  const xTicks=6;
+  for(let i=0;i<=xTicks;i++){
+    const t=zs.tMin+(zs.tMax-zs.tMin)*i/xTicks;
+    const x=tx(t);
+    ctx.strokeStyle=tc.grid; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,PAD.t); ctx.lineTo(x,H-PAD.b); ctx.stroke();
+    ctx.fillStyle=tc.axis; ctx.font='9px JetBrains Mono'; ctx.textAlign='center';
+    ctx.fillText(formatSI(t)+(meta.xUnit||'s'),x,H-PAD.b+11);
+  }
+
+  const highY=PAD.t+20;
+  const lowY=H-PAD.b-20;
+  const midY=(highY+lowY)/2;
+
+  // H/L labels
+  ctx.fillStyle=tc.axis; ctx.font='9px JetBrains Mono'; ctx.textAlign='right';
+  ctx.fillText('0 (D)',PAD.l-4,highY+3);
+  ctx.fillText('1 (R)',PAD.l-4,lowY+3);
+
+  // Stuff bit set
+  const stuffSet=new Set(stuffPositions);
+
+  // Draw square wave
+  ctx.save();
+  ctx.beginPath(); ctx.rect(PAD.l,PAD.t,pw,ph); ctx.clip();
+
+  for(let i=0;i<canBits.length;i++){
+    const bit=canBits[i];
+    if(bit.bitEnd<zs.tMin||bit.bitStart>zs.tMax) continue;
+
+    const x1=tx(bit.bitStart);
+    const x2=tx(bit.bitEnd);
+    const y=bit.value===0?highY:lowY;
+
+    const isStuff=stuffSet.has(i);
+
+    // Bit period background
+    if(isStuff){
+      // Hatched pattern for stuff bits
+      ctx.fillStyle=isDark?'rgba(85,85,85,0.15)':'rgba(100,100,100,0.1)';
+      ctx.fillRect(x1,PAD.t,x2-x1,ph);
+    }
+
+    // Square wave line
+    ctx.strokeStyle=isStuff?FIELD_COLORS.STUFF:CH_COLORS[0];
+    ctx.lineWidth=isStuff?1:2;
+    ctx.beginPath();
+    ctx.moveTo(x1,y);
+    ctx.lineTo(x2,y);
+    ctx.stroke();
+
+    // Vertical transition
+    if(i>0){
+      const prevBit=canBits[i-1];
+      const prevY=prevBit.value===0?highY:lowY;
+      if(prevY!==y){
+        ctx.strokeStyle=tc.axis; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(x1,prevY); ctx.lineTo(x1,y); ctx.stroke();
+      }
+    }
+
+    // Bit value label (if wide enough)
+    const pxWidth=x2-x1;
+    if(pxWidth>12){
+      ctx.fillStyle=isStuff?FIELD_COLORS.STUFF:tc.label;
+      ctx.font=(isStuff?'italic ':'')+'9px JetBrains Mono';
+      ctx.textAlign='center';
+      const label=isStuff?'S':String(bit.value);
+      ctx.fillText(label,(x1+x2)/2,midY+3);
+    }
+
+    // Bit period marker
+    ctx.strokeStyle=tc.grid; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(x1,PAD.t); ctx.lineTo(x1,H-PAD.b); ctx.stroke();
+  }
+
+  ctx.restore();
+
+  // Border
+  ctx.strokeStyle=tc.border; ctx.lineWidth=1;
+  ctx.strokeRect(PAD.l,PAD.t,pw,ph);
+
+  // Info
+  ctx.fillStyle=tc.muted; ctx.font='9px JetBrains Mono'; ctx.textAlign='left';
+  ctx.fillText(`${canBits.length} raw bits | ${stuffPositions.length} stuff bits | ${canBitsDestuffed.length} destuffed`,PAD.l,PAD.t-2);
+}
+
+// ── Step 4: Frame structure ──
+function drawFrameStructure(W,H){
+  const ctx=setupCanvas(mainCanvas,W,H);
+  const tc=themeColors();
+  ctx.fillStyle=tc.bg;
+  ctx.fillRect(0,0,W,H);
+
+  if(!canFrames.length||!canBitsDestuffed.length) return;
+
+  const zs=zoomState[4];
+  if(!zs||zs.tMin===null) return;
+
+  const pw=W-PAD.l-PAD.r;
+  const ph=H-PAD.t-PAD.b;
+  const tx=t=>PAD.l+(t-zs.tMin)/(zs.tMax-zs.tMin||1)*pw;
+
+  // X axis
+  const xTicks=6;
+  for(let i=0;i<=xTicks;i++){
+    const t=zs.tMin+(zs.tMax-zs.tMin)*i/xTicks;
+    const x=tx(t);
+    ctx.strokeStyle=tc.grid; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,PAD.t); ctx.lineTo(x,H-PAD.b); ctx.stroke();
+    ctx.fillStyle=tc.axis; ctx.font='9px JetBrains Mono'; ctx.textAlign='center';
+    ctx.fillText(formatSI(t)+(meta.xUnit||'s'),x,H-PAD.b+11);
+  }
+
+  const bandTop=PAD.t+10;
+  const bandH=40;
+  const bitTop=bandTop+bandH+10;
+  const bitH=30;
+  const highY=bitTop+2;
+  const lowY=bitTop+bitH-2;
+
+  // Draw each frame's field bands
+  for(let fi=0;fi<canFrames.length;fi++){
+    const frame=canFrames[fi];
+    if(frame.tEnd<zs.tMin||frame.tStart>zs.tMax) continue;
+
+    const isSelected=fi===selectedFrameIdx;
+
+    // Frame background highlight
+    if(isSelected){
+      const fx1=tx(frame.tStart), fx2=tx(frame.tEnd);
+      ctx.fillStyle=isDark?'rgba(0,229,255,0.06)':'rgba(8,145,178,0.06)';
+      ctx.fillRect(fx1,PAD.t,fx2-fx1,ph);
+    }
+
+    // Field color bands
+    for(const field of frame.fields){
+      const bits=canBitsDestuffed;
+      if(field.start>=bits.length||field.end>bits.length) continue;
+
+      const t1=bits[field.start].bitStart;
+      const t2=bits[field.end-1].bitEnd;
+      if(t2<zs.tMin||t1>zs.tMax) continue;
+
+      const x1=tx(t1), x2=tx(t2);
+      const bw=Math.max(x2-x1,1);
+
+      // Band
+      ctx.fillStyle=field.color;
+      ctx.globalAlpha=0.25;
+      ctx.fillRect(x1,bandTop,bw,bandH);
+      ctx.globalAlpha=1.0;
+
+      // Band border
+      ctx.strokeStyle=field.color; ctx.lineWidth=1;
+      ctx.strokeRect(x1,bandTop,bw,bandH);
+
+      // Label
+      if(bw>18){
+        ctx.fillStyle=field.color;
+        ctx.font='bold 9px JetBrains Mono';
+        ctx.textAlign='center';
+        const label=field.name;
+        ctx.fillText(label,(x1+x2)/2,bandTop+bandH/2+3);
+      }
+
+      // Bit waveform for this field
+      for(let bi=field.start;bi<field.end&&bi<bits.length;bi++){
+        const b=bits[bi];
+        const bx1=tx(b.bitStart), bx2=tx(b.bitEnd);
+        const by=b.value===0?highY:lowY;
+
+        ctx.strokeStyle=field.color; ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.moveTo(bx1,by); ctx.lineTo(bx2,by); ctx.stroke();
+
+        // Transition
+        if(bi>field.start){
+          const prevB=bits[bi-1];
+          const prevY=prevB.value===0?highY:lowY;
+          if(prevY!==by){
+            ctx.strokeStyle=tc.axis; ctx.lineWidth=1;
+            ctx.beginPath(); ctx.moveTo(bx1,prevY); ctx.lineTo(bx1,by); ctx.stroke();
+          }
+        }
+
+        // Bit value
+        const bpx=bx2-bx1;
+        if(bpx>10){
+          ctx.fillStyle=field.color;
+          ctx.font='8px JetBrains Mono'; ctx.textAlign='center';
+          ctx.fillText(String(b.value),(bx1+bx2)/2,(highY+lowY)/2+3);
+        }
+      }
+    }
+
+    // Frame number label
+    const fx1=tx(frame.tStart);
+    ctx.fillStyle=tc.label; ctx.font='bold 10px JetBrains Mono'; ctx.textAlign='left';
+    ctx.fillText(`#${fi+1}`,fx1,bandTop-2);
+
+    // ID label below bands
+    const idStr=frame.isExtended?
+      '0x'+frame.id.toString(16).toUpperCase().padStart(8,'0'):
+      '0x'+frame.id.toString(16).toUpperCase().padStart(3,'0');
+    ctx.fillStyle=FIELD_COLORS.ID; ctx.font='10px JetBrains Mono'; ctx.textAlign='left';
+    ctx.fillText(`ID:${idStr}`,fx1,bitTop+bitH+14);
+
+    // Error indicator
+    if(frame.errors.length){
+      ctx.fillStyle=FIELD_COLORS.ACK_NO; ctx.font='bold 9px JetBrains Mono';
+      ctx.fillText(frame.errors.join(','),fx1,bitTop+bitH+26);
+    }
+  }
+
+  // Border
+  ctx.strokeStyle=tc.border; ctx.lineWidth=1;
+  ctx.strokeRect(PAD.l,PAD.t,pw,ph);
+
+  // Info
+  ctx.fillStyle=tc.muted; ctx.font='9px JetBrains Mono'; ctx.textAlign='left';
+  const errCount=canFrames.filter(f=>f.errors.length>0).length;
+  ctx.fillText(`${canFrames.length} frames | ${errCount} with errors`,PAD.l,PAD.t-2);
+}
+
+// ── Summary panel ──
+function updateSummary(){
+  if(!canFrames.length){
+    summarySection.style.display='none';
+    return;
+  }
+  summarySection.style.display='';
+  const total=canFrames.length;
+  const errFrames=canFrames.filter(f=>f.errors.length>0);
+  const valid=total-errFrames.length;
+
+  // Error breakdown
+  const errCounts={};
+  errFrames.forEach(f=>f.errors.forEach(e=>{
+    errCounts[e]=(errCounts[e]||0)+1;
+  }));
+
+  // Bus utilization
+  let busUtil=0;
+  if(waveData&&waveData.time.length>=2&&canFrames.length){
+    const totalTime=waveData.time[waveData.time.length-1]-waveData.time[0];
+    let frameTime=0;
+    canFrames.forEach(f=>frameTime+=(f.tEnd-f.tStart));
+    busUtil=(frameTime/totalTime)*100;
+  }
+
+  let html='';
+  html+=`<div class="sum-row"><span class="lbl">Total frames</span><span class="val">${total}</span></div>`;
+  html+=`<div class="sum-row"><span class="lbl">Valid</span><span class="val ok">${valid}</span></div>`;
+  html+=`<div class="sum-row"><span class="lbl">With errors</span><span class="val ${errFrames.length?'err':''}">${errFrames.length}</span></div>`;
+  html+=`<div class="sum-row"><span class="lbl">Bus util</span><span class="val">${busUtil.toFixed(1)}%</span></div>`;
+
+  if(Object.keys(errCounts).length){
+    html+=`<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:4px;">`;
+    html+=`<div class="sb-title" style="margin-bottom:4px;">Error Breakdown</div>`;
+    for(const [err,cnt] of Object.entries(errCounts)){
+      html+=`<div class="sum-row"><span class="lbl">${err}</span><span class="val err">${cnt}</span></div>`;
+    }
+    html+=`</div>`;
+  }
+
+  // Stuff bits info
+  html+=`<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:4px;">`;
+  html+=`<div class="sum-row"><span class="lbl">Raw bits</span><span class="val">${canBits.length}</span></div>`;
+  html+=`<div class="sum-row"><span class="lbl">Stuff bits</span><span class="val">${stuffPositions.length}</span></div>`;
+  html+=`<div class="sum-row"><span class="lbl">Destuffed</span><span class="val">${canBitsDestuffed.length}</span></div>`;
+  html+=`<div class="sum-row"><span class="lbl">Segments</span><span class="val">${canSegments.length}</span></div>`;
+  html+=`</div>`;
+
+  summaryContent.innerHTML=html;
+}
+
+// ── Frames table ──
+function renderFrameTable(){
+  framesTbody.innerHTML='';
+  if(!canFrames.length) return;
+
+  canFrames.forEach((frame,i)=>{
+    const tr=document.createElement('tr');
+    tr.className=(frame.errors.length?'has-error':'')+(i===selectedFrameIdx?' selected':'');
+
+    const idStr=frame.isExtended?
+      '0x'+frame.id.toString(16).toUpperCase().padStart(8,'0'):
+      '0x'+frame.id.toString(16).toUpperCase().padStart(3,'0');
+
+    const dataStr=frame.dataBytes.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ');
+    const crcStr='0x'+frame.crcReceived.toString(16).toUpperCase().padStart(4,'0');
+    const errStr=frame.errors.map(e=>`<span class="err-tag">${e}</span>`).join('');
+    const typeStr=frame.isExtended?'EXT':'STD';
+
+    tr.innerHTML=`
+      <td class="mono">${i+1}</td>
+      <td class="mono">${formatSI(frame.tStart)}${meta.xUnit||'s'}</td>
+      <td>${typeStr}</td>
+      <td class="mono" style="color:${FIELD_COLORS.ID};font-weight:600;">${idStr}</td>
+      <td>${frame.rtr?'Y':'N'}</td>
+      <td>${frame.dlc}</td>
+      <td class="mono data-cell">${dataStr||'-'}</td>
+      <td class="mono">${crcStr}${frame.crcReceived!==frame.crcComputed?' <span style="color:var(--ch2);">(exp '+('0x'+frame.crcComputed.toString(16).toUpperCase().padStart(4,'0'))+')</span>':''}</td>
+      <td>${errStr||'<span style="color:var(--ch4);">OK</span>'}</td>`;
+
+    tr.addEventListener('click',()=>{
+      selectedFrameIdx=i;
+      // Zoom to this frame on step 4
+      zoomState[4]={tMin:frame.tStart-(frame.tEnd-frame.tStart)*0.1, tMax:frame.tEnd+(frame.tEnd-frame.tStart)*0.1};
+      pipelineStep=4;
+      updatePipelineUI();
+      drawMainCanvas();
+      renderFrameTable();
+    });
+
+    framesTbody.appendChild(tr);
+  });
+}
+
+// ============================================================================
+// INTERACTION: Zoom/Pan on main canvas
+// ============================================================================
+
+mainCanvas.addEventListener('wheel',e=>{
+  if(!waveData) return;
+  e.preventDefault();
+  const zs=zoomState[pipelineStep];
+  if(!zs||zs.tMin===null) return;
+
+  const rect=mainCanvas.getBoundingClientRect();
+  const f=Math.max(0,Math.min(1,(e.clientX-rect.left-PAD.l)/(rect.width-PAD.l-PAD.r)));
+  const cx=zs.tMin+f*(zs.tMax-zs.tMin);
+
+  const factor=e.deltaY>0?1.25:0.8;
+  const span=(zs.tMax-zs.tMin)*factor;
+
+  // Get full data range for this step
+  const fullRange=getStepFullRange();
+  const minSpan=(fullRange.tMax-fullRange.tMin)*0.00005;
+  const clampedSpan=Math.max(span,minSpan);
+
+  const ratio=(cx-zs.tMin)/((zs.tMax-zs.tMin)||1);
+  let nMin=cx-ratio*clampedSpan;
+  let nMax=nMin+clampedSpan;
+
+  if(nMin<fullRange.tMin){nMin=fullRange.tMin;nMax=nMin+clampedSpan;}
+  if(nMax>fullRange.tMax){nMax=fullRange.tMax;nMin=nMax-clampedSpan;}
+  zs.tMin=Math.max(nMin,fullRange.tMin);
+  zs.tMax=Math.min(nMax,fullRange.tMax);
+
+  drawMainCanvas();
+},{passive:false});
+
+mainCanvas.addEventListener('mousedown',e=>{
+  if(!waveData) return;
+  const zs=zoomState[pipelineStep];
+  if(!zs||zs.tMin===null) return;
+  const rect=mainCanvas.getBoundingClientRect();
+  mainDragStart={x:e.clientX-rect.left, tMin:zs.tMin, tMax:zs.tMax};
+  e.preventDefault();
+});
+
+window.addEventListener('mousemove',e=>{
+  if(!mainDragStart||!waveData) return;
+  const zs=zoomState[pipelineStep];
+  if(!zs) return;
+  const rect=mainCanvas.getBoundingClientRect();
+  const dx=(e.clientX-rect.left)-mainDragStart.x;
+  const pw=rect.width-PAD.l-PAD.r;
+  const dt=dx/pw*(mainDragStart.tMax-mainDragStart.tMin);
+  const span=mainDragStart.tMax-mainDragStart.tMin;
+
+  const fullRange=getStepFullRange();
+  let nMin=mainDragStart.tMin-dt;
+  let nMax=mainDragStart.tMax-dt;
+  if(nMin<fullRange.tMin){nMin=fullRange.tMin;nMax=nMin+span;}
+  if(nMax>fullRange.tMax){nMax=fullRange.tMax;nMin=nMax-span;}
+  zs.tMin=nMin;
+  zs.tMax=nMax;
+  drawMainCanvas();
+});
+
+window.addEventListener('mouseup',()=>{ mainDragStart=null; });
+
+mainCanvas.addEventListener('dblclick',()=>{
+  if(!waveData) return;
+  const zs=zoomState[pipelineStep];
+  if(!zs) return;
+  const fullRange=getStepFullRange();
+  zs.tMin=fullRange.tMin;
+  zs.tMax=fullRange.tMax;
+  drawMainCanvas();
+});
+
+function getStepFullRange(){
+  switch(pipelineStep){
+    case 1:
+      if(waveData&&waveData.time.length)
+        return {tMin:waveData.time[0],tMax:waveData.time[waveData.time.length-1]};
+      break;
+    case 2:
+      if(diffData&&diffData.time.length)
+        return {tMin:diffData.time[0],tMax:diffData.time[diffData.time.length-1]};
+      break;
+    case 3:
+      if(canBits.length)
+        return {tMin:canBits[0].bitStart,tMax:canBits[canBits.length-1].bitEnd};
+      break;
+    case 4:
+      if(canFrames.length){
+        let tMin=canFrames[0].tStart, tMax=canFrames[canFrames.length-1].tEnd;
+        return {tMin,tMax};
+      }
+      break;
+  }
+  return {tMin:0,tMax:1};
+}
+
+// ============================================================================
+// FILE HANDLING
+// ============================================================================
+
+openBtn.addEventListener('click',()=>fileInput.click());
+dropZone.addEventListener('click',()=>fileInput.click());
+fileInput.addEventListener('change',e=>{if(e.target.files[0])startLoad(e.target.files[0]);fileInput.value='';});
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('over');});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('over'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('over');if(e.dataTransfer.files[0])startLoad(e.dataTransfer.files[0]);});
+
+window.addEventListener('dragover',e=>{
+  if(e.dataTransfer&&Array.from(e.dataTransfer.types||[]).includes('Files')) e.preventDefault();
+});
+window.addEventListener('drop',e=>{
+  if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]){
+    e.preventDefault(); startLoad(e.dataTransfer.files[0]);
+  }
+});
+
+$('close-btn').addEventListener('click',closeCurrentFile);
+
+function startLoad(file){
+  if(loading.classList.contains('show')) return;
+  const cur=currentSession();
+  if(cur) saveCurrent(cur);
+
+  const s=makeSession(file.name);
+  sessions.push(s);
+  currentSessionId=s.id;
+  loadInto(s);
+
+  setView('loading','Reading...');
+  renderTabs();
+  const r=new FileReader();
+  r.onload=e=>{fileText=e.target.result;setTimeout(processFile,10);};
+  r.readAsText(file);
+}
+
+// ── Theme toggle ──
+const themeBtn=$('theme-btn');
+themeBtn.addEventListener('click',()=>{
+  isDark=!isDark;
+  document.documentElement.classList.toggle('light',!isDark);
+  CH_COLORS=isDark?CH_DARK:CH_LIGHT;
+  themeBtn.innerHTML=isDark?'&#9728; Light':'&#9790; Dark';
+  drawMinimap();
+  drawMainCanvas();
+});
+
+// ── Resize handler ──
+window.addEventListener('resize',()=>{
+  drawMinimap();
+  drawMainCanvas();
+});
+
+// ── Click on frame table row scrolls to frame ──
+// (handled in renderFrameTable above)
+
+// ============================================================================
+// ATTACH RANGE DRAG (reused from signal-viewer)
+// ============================================================================
+
+function attachRangeDrag(opts){
+  const {
+    trigger,            // element receiving mousedown/touchstart
+    canvasForRect,      // element used for getBoundingClientRect (often = trigger)
+    isActive,           // () => bool
+    pxToTime,           // (px) => time
+    timeToPx,           // (t) => px
+    getA, setA, getB, setB,
+    getDragMode, setDragMode,
+    onChange,           // () => void; called after each state mutation
+    enableTouch=false,
+    snapPx=10,
+  } = opts;
+
+  const rect = ()=>canvasForRect.getBoundingClientRect();
+
+  trigger.addEventListener('mousedown', e=>{
+    if(!isActive()) return;
+    const r=rect();
+    const x=e.clientX-r.left;
+    const a=getA(), b=getB();
+    if(a!==null && Math.abs(x-timeToPx(a))<snapPx) setDragMode('a');
+    else if(b!==null && Math.abs(x-timeToPx(b))<snapPx) setDragMode('b');
+    else { setDragMode('new'); const t=pxToTime(x); setA(t); setB(t); }
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', e=>{
+    const dm=getDragMode();
+    if(!dm || !isActive()) return;
+    const r=rect();
+    const t=pxToTime(e.clientX-r.left);
+    if(dm==='a') setA(t);
+    else if(dm==='b') setB(t);
+    else setB(t);
+    let a=getA(), b=getB();
+    if(a>b){
+      setA(b); setB(a);
+      if(dm==='a') setDragMode('b');
+      else if(dm==='b') setDragMode('a');
+    }
+    onChange();
+  });
+
+  window.addEventListener('mouseup', ()=>{
+    if(getDragMode()){ setDragMode(null); onChange(); }
+  });
+
+  if(enableTouch){
+    trigger.addEventListener('touchstart', e=>{
+      if(!isActive()) return;
+      const r=rect();
+      const x=e.touches[0].clientX-r.left;
+      const t=pxToTime(x);
+      setA(t); setB(t); setDragMode('new');
+      e.preventDefault();
+    },{passive:false});
+
+    window.addEventListener('touchmove', e=>{
+      if(!getDragMode() || !isActive()) return;
+      const r=rect();
+      const t=pxToTime(e.touches[0].clientX-r.left);
+      setB(t);
+      let a=getA(), b=getB();
+      if(a>b){ setA(b); setB(a); }
+      onChange();
+    });
+
+    window.addEventListener('touchend', ()=>{ setDragMode(null); });
+  }
+}
+
+// ============================================================================
+// MINIMAP DRAG INTERACTION
+// ============================================================================
+
+let minimapDragState = null; // {startX, origTMin, origTMax}
+
+minimapSel.addEventListener('mousedown', e=>{
+  if(!waveData || !waveData.time.length) return;
+  e.preventDefault(); e.stopPropagation();
+  const rect=minimapWrap.getBoundingClientRect();
+  const zs=zoomState[pipelineStep];
+  if(!zs||zs.tMin===null) return;
+  minimapDragState={startX:e.clientX-rect.left, origTMin:zs.tMin, origTMax:zs.tMax};
+  minimapSel.style.cursor='grabbing';
+});
+
+minimapWrap.addEventListener('mousedown', e=>{
+  if(minimapDragState) return; // already dragging selection
+  if(!waveData || !waveData.time.length) return;
+  e.preventDefault();
+  const rect=minimapWrap.getBoundingClientRect();
+  const x=e.clientX-rect.left;
+  const W=rect.width;
+  const time=waveData.time;
+  const tFull=time[time.length-1]-time[0];
+  const clickT=time[0]+(x/W)*tFull;
+
+  const zs=zoomState[pipelineStep];
+  if(!zs||zs.tMin===null) return;
+  const span=zs.tMax-zs.tMin;
+  let nMin=clickT-span/2;
+  let nMax=clickT+span/2;
+  const fullRange=getStepFullRange();
+  if(nMin<fullRange.tMin){nMin=fullRange.tMin;nMax=nMin+span;}
+  if(nMax>fullRange.tMax){nMax=fullRange.tMax;nMin=nMax-span;}
+  zs.tMin=Math.max(nMin,fullRange.tMin);
+  zs.tMax=Math.min(nMax,fullRange.tMax);
+  drawMainCanvas();
+});
+
+window.addEventListener('mousemove', e=>{
+  if(!minimapDragState) return;
+  const rect=minimapWrap.getBoundingClientRect();
+  const dx=e.clientX-rect.left-minimapDragState.startX;
+  const W=rect.width;
+  const time=waveData.time;
+  const tFull=time[time.length-1]-time[0];
+  const dt=(dx/W)*tFull;
+
+  const zs=zoomState[pipelineStep];
+  if(!zs) return;
+  const span=minimapDragState.origTMax-minimapDragState.origTMin;
+  const fullRange=getStepFullRange();
+  let nMin=minimapDragState.origTMin+dt;
+  let nMax=minimapDragState.origTMax+dt;
+  if(nMin<fullRange.tMin){nMin=fullRange.tMin;nMax=nMin+span;}
+  if(nMax>fullRange.tMax){nMax=fullRange.tMax;nMin=nMax-span;}
+  zs.tMin=Math.max(nMin,fullRange.tMin);
+  zs.tMax=Math.min(nMax,fullRange.tMax);
+  drawMainCanvas();
+});
+
+window.addEventListener('mouseup', ()=>{
+  if(minimapDragState){
+    minimapDragState=null;
+    minimapSel.style.cursor='grab';
+  }
+});
+
+// Minimap scroll to zoom the view window
+minimapWrap.addEventListener('wheel', e=>{
+  if(!waveData||!waveData.time.length) return;
+  e.preventDefault();
+  const zs=zoomState[pipelineStep];
+  if(!zs||zs.tMin===null) return;
+  const factor=e.deltaY>0?1.3:0.7;
+  const center=(zs.tMin+zs.tMax)/2;
+  const span=(zs.tMax-zs.tMin)*factor;
+  const fullRange=getStepFullRange();
+  const maxSpan=fullRange.tMax-fullRange.tMin;
+  const minSpan=maxSpan*0.00005;
+  const clampedSpan=Math.max(Math.min(span,maxSpan),minSpan);
+  let nMin=center-clampedSpan/2;
+  let nMax=center+clampedSpan/2;
+  if(nMin<fullRange.tMin){nMin=fullRange.tMin;nMax=nMin+clampedSpan;}
+  if(nMax>fullRange.tMax){nMax=fullRange.tMax;nMin=nMax-clampedSpan;}
+  zs.tMin=Math.max(nMin,fullRange.tMin);
+  zs.tMax=Math.min(nMax,fullRange.tMax);
+  drawMainCanvas();
+},{passive:false});
+
+// ============================================================================
+// CROSSHAIR + CURSOR READOUT
+// ============================================================================
+
+let mouseOnCanvas=false;
+let mouseCanvasX=0, mouseCanvasY=0;
+
+mainCanvas.addEventListener('mouseenter',()=>{ mouseOnCanvas=true; });
+mainCanvas.addEventListener('mouseleave',()=>{
+  mouseOnCanvas=false;
+  xhairV.style.display='none';
+  xhairH.style.display='none';
+  cursorReadout.textContent='';
+  canvasTooltip.style.display='none';
+});
+
+mainCanvas.addEventListener('mousemove', e=>{
+  if(mainDragStart) return; // suppress crosshair during drag
+  const rect=mainCanvas.getBoundingClientRect();
+  const x=e.clientX-rect.left;
+  const y=e.clientY-rect.top;
+  mouseCanvasX=x; mouseCanvasY=y;
+
+  // Crosshair lines
+  if(x>=PAD.l && x<=rect.width-PAD.r && y>=PAD.t && y<=rect.height-PAD.b){
+    xhairV.style.display='';
+    xhairH.style.display='';
+    xhairV.style.left=x+'px';
+    xhairH.style.top=y+'px';
+  } else {
+    xhairV.style.display='none';
+    xhairH.style.display='none';
+  }
+
+  // Cursor readout: time at mouse position
+  const zs=zoomState[pipelineStep];
+  if(!zs||zs.tMin===null) return;
+  const pw=rect.width-PAD.l-PAD.r;
+  if(pw<=0) return;
+  const frac=(x-PAD.l)/pw;
+  if(frac<0||frac>1){ cursorReadout.textContent=''; return; }
+  const t=zs.tMin+frac*(zs.tMax-zs.tMin);
+  const unit=meta.xUnit||'s';
+
+  let readoutText=`t = ${formatSI(t)}${unit}`;
+
+  // Step-specific value readout
+  if(pipelineStep===1 && waveData){
+    // Find nearest sample
+    const time=waveData.time;
+    let best=-1, bestDist=Infinity;
+    // Binary search for efficiency
+    let lo=0, hi=time.length-1;
+    while(lo<=hi){
+      const mid=(lo+hi)>>1;
+      if(time[mid]<t) lo=mid+1; else hi=mid-1;
+    }
+    best=lo;
+    if(best>0 && Math.abs(time[best-1]-t)<Math.abs((time[best]||Infinity)-t)) best--;
+    if(best>=0 && best<time.length){
+      const vals=waveData.chs.map((ch,ci)=>visible[ci]?`${sigNames[ci]}=${ch[best].toPrecision(4)}V`:'').filter(Boolean);
+      readoutText+=` | ${vals.join(' | ')}`;
+    }
+  } else if(pipelineStep===2 && diffData){
+    const time=diffData.time;
+    let lo=0, hi=time.length-1;
+    while(lo<=hi){ const mid=(lo+hi)>>1; if(time[mid]<t) lo=mid+1; else hi=mid-1; }
+    let best=lo;
+    if(best>0 && Math.abs(time[best-1]-t)<Math.abs((time[best]||Infinity)-t)) best--;
+    if(best>=0 && best<time.length){
+      readoutText+=` | diff = ${diffData.diff[best].toPrecision(4)}V`;
+      readoutText+=` | ${diffData.diff[best]>=canThreshold?'DOMINANT':'RECESSIVE'}`;
+    }
+  } else if(pipelineStep===3 && canBits.length){
+    // Find which bit the cursor is over
+    const bitIdx=findBitAtTime(canBits,t);
+    if(bitIdx>=0){
+      const b=canBits[bitIdx];
+      const isStuff=stuffPositions.includes(bitIdx);
+      readoutText+=` | bit #${bitIdx}: ${b.value}${isStuff?' (STUFF)':''}`;
+    }
+  } else if(pipelineStep===4 && canFrames.length){
+    // Find which frame and field the cursor is over
+    const fi=findFrameAtTime(t);
+    if(fi>=0){
+      const frame=canFrames[fi];
+      const idStr=frame.isExtended?
+        '0x'+frame.id.toString(16).toUpperCase().padStart(8,'0'):
+        '0x'+frame.id.toString(16).toUpperCase().padStart(3,'0');
+      readoutText+=` | Frame #${fi+1} ID:${idStr}`;
+      // Find field
+      const field=findFieldAtTime(frame,t);
+      if(field) readoutText+=` | ${field.name}`;
+    }
+  }
+
+  cursorReadout.textContent=readoutText;
+
+  // Update status bar
+  updateStatusBar(t);
+});
+
+function findBitAtTime(bits,t){
+  // Binary search
+  let lo=0, hi=bits.length-1;
+  while(lo<=hi){
+    const mid=(lo+hi)>>1;
+    if(bits[mid].bitEnd<t) lo=mid+1;
+    else if(bits[mid].bitStart>t) hi=mid-1;
+    else return mid;
+  }
+  return -1;
+}
+
+function findFrameAtTime(t){
+  for(let i=0;i<canFrames.length;i++){
+    if(t>=canFrames[i].tStart && t<=canFrames[i].tEnd) return i;
+  }
+  return -1;
+}
+
+function findFieldAtTime(frame,t){
+  if(!canBitsDestuffed.length) return null;
+  for(const field of frame.fields){
+    if(field.start>=canBitsDestuffed.length||field.end>canBitsDestuffed.length) continue;
+    const t1=canBitsDestuffed[field.start].bitStart;
+    const t2=canBitsDestuffed[field.end-1].bitEnd;
+    if(t>=t1 && t<=t2) return field;
+  }
+  return null;
+}
+
+function updateStatusBar(t){
+  if(!waveData) return;
+  statusBar.classList.add('show');
+  const unit=meta.xUnit||'s';
+  sbPos.textContent=`Cursor: ${formatSI(t)}${unit}`;
+  const zs=zoomState[pipelineStep];
+  if(zs&&zs.tMin!==null){
+    const span=zs.tMax-zs.tMin;
+    const fullRange=getStepFullRange();
+    const fullSpan=fullRange.tMax-fullRange.tMin;
+    const pct=fullSpan>0?((span/fullSpan)*100).toFixed(1):'--';
+    sbZoom.textContent=`Span: ${formatSI(span)}${unit} (${pct}%)`;
+  }
+}
+
+// ============================================================================
+// TOOLTIP for frame structure view (step 4)
+// ============================================================================
+
+mainCanvas.addEventListener('mousemove', function tooltipHandler(e){
+  if(pipelineStep!==4 || !canFrames.length || mainDragStart){
+    canvasTooltip.style.display='none';
+    return;
+  }
+  const rect=mainCanvas.getBoundingClientRect();
+  const x=e.clientX-rect.left;
+  const y=e.clientY-rect.top;
+  const zs=zoomState[4];
+  if(!zs||zs.tMin===null){canvasTooltip.style.display='none';return;}
+  const pw=rect.width-PAD.l-PAD.r;
+  const frac=(x-PAD.l)/pw;
+  if(frac<0||frac>1){canvasTooltip.style.display='none';return;}
+  const t=zs.tMin+frac*(zs.tMax-zs.tMin);
+
+  const fi=findFrameAtTime(t);
+  if(fi<0){canvasTooltip.style.display='none';return;}
+  const frame=canFrames[fi];
+  const field=findFieldAtTime(frame,t);
+
+  const idStr=frame.isExtended?
+    '0x'+frame.id.toString(16).toUpperCase().padStart(8,'0'):
+    '0x'+frame.id.toString(16).toUpperCase().padStart(3,'0');
+  const dataStr=frame.dataBytes.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ');
+
+  let html=`<div class="tt-title">Frame #${fi+1} ${frame.isExtended?'Extended':'Standard'}</div>`;
+  html+=`<div class="tt-row"><span class="tt-label">ID:</span><span class="tt-val" style="color:${FIELD_COLORS.ID}">${idStr}</span></div>`;
+  html+=`<div class="tt-row"><span class="tt-label">DLC:</span><span class="tt-val">${frame.dlc}</span></div>`;
+  if(dataStr) html+=`<div class="tt-row"><span class="tt-label">Data:</span><span class="tt-val" style="color:${FIELD_COLORS.DATA}">${dataStr}</span></div>`;
+  html+=`<div class="tt-row"><span class="tt-label">CRC:</span><span class="tt-val" style="color:${FIELD_COLORS.CRC}">0x${frame.crcReceived.toString(16).toUpperCase().padStart(4,'0')}${frame.crcReceived!==frame.crcComputed?' MISMATCH':' OK'}</span></div>`;
+  html+=`<div class="tt-row"><span class="tt-label">ACK:</span><span class="tt-val" style="color:${frame.ackBit===0?FIELD_COLORS.ACK_OK:FIELD_COLORS.ACK_NO}">${frame.ackBit===0?'Acknowledged':'No ACK'}</span></div>`;
+  if(field) html+=`<div class="tt-row" style="margin-top:3px;border-top:1px solid var(--border);padding-top:3px;"><span class="tt-label">Field:</span><span class="tt-val" style="color:${field.color}">${field.name}</span></div>`;
+  if(frame.errors.length) html+=`<div class="tt-row" style="color:var(--ch2);"><span class="tt-label">Errors:</span><span class="tt-val">${frame.errors.join(', ')}</span></div>`;
+
+  canvasTooltip.innerHTML=html;
+  canvasTooltip.style.display='block';
+
+  // Position tooltip
+  let ttX=x+12, ttY=y+12;
+  const ttW=canvasTooltip.offsetWidth, ttH=canvasTooltip.offsetHeight;
+  if(ttX+ttW>rect.width-4) ttX=x-ttW-8;
+  if(ttY+ttH>rect.height-4) ttY=y-ttH-8;
+  canvasTooltip.style.left=Math.max(0,ttX)+'px';
+  canvasTooltip.style.top=Math.max(0,ttY)+'px';
+});
+
+// ============================================================================
+// FRAME FILTERING
+// ============================================================================
+
+let frameFilterIdVal='', frameFilterStatusVal='all', frameFilterTypeVal='all';
+
+frameFilterId.addEventListener('input', e=>{
+  frameFilterIdVal=e.target.value.trim().toLowerCase().replace(/^0x/,'');
+  renderFrameTable();
+});
+frameFilterStatus.addEventListener('change', e=>{
+  frameFilterStatusVal=e.target.value;
+  renderFrameTable();
+});
+frameFilterType.addEventListener('change', e=>{
+  frameFilterTypeVal=e.target.value;
+  renderFrameTable();
+});
+
+function getFilteredFrames(){
+  return canFrames.filter((frame,i)=>{
+    // ID filter
+    if(frameFilterIdVal){
+      const idHex=frame.id.toString(16).toLowerCase();
+      const idHexPad=frame.isExtended?idHex.padStart(8,'0'):idHex.padStart(3,'0');
+      if(!idHex.startsWith(frameFilterIdVal) && !idHexPad.startsWith(frameFilterIdVal)){
+        return false;
+      }
+    }
+    // Status filter
+    if(frameFilterStatusVal==='ok' && frame.errors.length>0) return false;
+    if(frameFilterStatusVal==='error' && frame.errors.length===0) return false;
+    // Type filter
+    if(frameFilterTypeVal==='std' && frame.isExtended) return false;
+    if(frameFilterTypeVal==='ext' && !frame.isExtended) return false;
+    return true;
+  });
+}
+
+// ============================================================================
+// EXPORT FUNCTIONS
+// ============================================================================
+
+function exportFramesCsv(){
+  if(!canFrames.length) return;
+  const filtered=getFilteredFrames();
+  const rows=['#,Time,Type,ID,RTR,DLC,Data(hex),CRC_Received,CRC_Computed,ACK,Errors'];
+  filtered.forEach((frame,i)=>{
+    const idStr=frame.isExtended?
+      '0x'+frame.id.toString(16).toUpperCase().padStart(8,'0'):
+      '0x'+frame.id.toString(16).toUpperCase().padStart(3,'0');
+    const dataStr=frame.dataBytes.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ');
+    const crcR='0x'+frame.crcReceived.toString(16).toUpperCase().padStart(4,'0');
+    const crcC='0x'+frame.crcComputed.toString(16).toUpperCase().padStart(4,'0');
+    rows.push(`${i+1},${frame.tStart},${frame.isExtended?'EXT':'STD'},${idStr},${frame.rtr?'Y':'N'},${frame.dlc},"${dataStr}",${crcR},${crcC},${frame.ackBit===0?'ACK':'NOACK'},"${frame.errors.join('; ')}"`);
+  });
+  download(rows.join('\n'),'can_frames.csv');
+}
+
+function exportBitsCsv(){
+  if(!canBits.length) return;
+  const rows=['Index,Time,BitStart,BitEnd,Value,IsStuff'];
+  const stuffSet=new Set(stuffPositions);
+  canBits.forEach((bit,i)=>{
+    rows.push(`${i},${bit.time},${bit.bitStart},${bit.bitEnd},${bit.value},${stuffSet.has(i)?'Y':'N'}`);
+  });
+  download(rows.join('\n'),'can_bits.csv');
+}
+
+exportFramesBtn.addEventListener('click',exportFramesCsv);
+exportBitsBtn.addEventListener('click',exportBitsCsv);
+
+// ============================================================================
+// KEYBOARD SHORTCUTS
+// ============================================================================
+
+window.addEventListener('keydown',e=>{
+  // Avoid capturing keystrokes in input fields
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA') return;
+
+  // 1-4 to switch pipeline steps
+  if(e.key>='1'&&e.key<='4'){
+    const step=parseInt(e.key);
+    if(pipelineComplete[step-1]){
+      pipelineStep=step;
+      updatePipelineUI();
+      drawMainCanvas();
+    }
+  }
+  // R to reset zoom
+  if(e.key==='r'||e.key==='R'){
+    const zs=zoomState[pipelineStep];
+    if(zs){
+      const fullRange=getStepFullRange();
+      zs.tMin=fullRange.tMin;
+      zs.tMax=fullRange.tMax;
+      drawMainCanvas();
+    }
+  }
+  // F to toggle filter bar
+  if(e.key==='f'||e.key==='F'){
+    frameFilterBar.classList.toggle('show');
+    if(frameFilterBar.classList.contains('show')){
+      frameFilterId.focus();
+    }
+  }
+  // E to export frames
+  if(e.key==='e'||e.key==='E'){
+    if(canFrames.length) exportFramesCsv();
+  }
+  // Escape to close filter
+  if(e.key==='Escape'){
+    frameFilterBar.classList.remove('show');
+    canvasTooltip.style.display='none';
+  }
+  // Left/Right arrow to navigate between frames on step 4
+  if(pipelineStep===4 && canFrames.length){
+    if(e.key==='ArrowRight'){
+      e.preventDefault();
+      selectedFrameIdx=Math.min(selectedFrameIdx+1,canFrames.length-1);
+      if(selectedFrameIdx<0) selectedFrameIdx=0;
+      zoomToSelectedFrame();
+    }
+    if(e.key==='ArrowLeft'){
+      e.preventDefault();
+      selectedFrameIdx=Math.max(selectedFrameIdx-1,0);
+      zoomToSelectedFrame();
+    }
+  }
+  // Home/End to go to first/last frame
+  if(pipelineStep===4 && canFrames.length){
+    if(e.key==='Home'){
+      e.preventDefault();
+      selectedFrameIdx=0;
+      zoomToSelectedFrame();
+    }
+    if(e.key==='End'){
+      e.preventDefault();
+      selectedFrameIdx=canFrames.length-1;
+      zoomToSelectedFrame();
+    }
+  }
+});
+
+function zoomToSelectedFrame(){
+  if(selectedFrameIdx<0||selectedFrameIdx>=canFrames.length) return;
+  const frame=canFrames[selectedFrameIdx];
+  const pad=(frame.tEnd-frame.tStart)*0.15;
+  zoomState[4]={tMin:frame.tStart-pad, tMax:frame.tEnd+pad};
+  updatePipelineUI();
+  drawMainCanvas();
+  renderFrameTable();
+  // Scroll table to selected row
+  const rows=framesTbody.querySelectorAll('tr');
+  if(rows[selectedFrameIdx]){
+    rows[selectedFrameIdx].scrollIntoView({block:'nearest'});
+  }
+}
+
+// ============================================================================
+// MULTIPLE FRAME BIT SAMPLING PASSES
+// ============================================================================
+// When sampleBitsFromSegments returns bits, there may be multiple bus idle gaps.
+// The findFrames function handles this by looking for SOF (dominant) bits after
+// sequences of recessive bits. For multiple frames, the sampling continues through
+// the full segment stream. The destuffing also restarts at frame boundaries
+// to handle the case where stuff bit counts shouldn't span frames.
+
+// Additional helper: restart bit sampling after long idle gaps
+function sampleBitsMultiFrame(segments, bitRate){
+  const allBits=[];
+  if(segments.length===0) return allBits;
+
+  const bitPeriod=1.0/bitRate;
+  const idleThresh=bitPeriod*11; // 11+ recessive bits = inter-frame space
+
+  // Split segments into frame candidate regions by idle gaps
+  let regionStart=0;
+  const regions=[];
+
+  for(let i=0;i<segments.length;i++){
+    if(segments[i].state==='R' && segments[i].dur>=idleThresh){
+      if(i>regionStart){
+        regions.push({start:regionStart, end:i});
+      }
+      regionStart=i+1;
+    }
+  }
+  // Last region
+  if(regionStart<segments.length){
+    regions.push({start:regionStart, end:segments.length});
+  }
+
+  // For each region, run the single-pass sampler
+  for(const region of regions){
+    const subSegments=segments.slice(region.start, region.end);
+    const bits=sampleBitsFromSegments(subSegments, bitRate);
+    // Offset bit indices
+    const offset=allBits.length;
+    allBits.push(...bits);
+  }
+
+  // If no regions found, fall back to single pass
+  if(allBits.length===0){
+    return sampleBitsFromSegments(segments, bitRate);
+  }
+
+  return allBits;
+}
+
+// ============================================================================
+// FRAME STATISTICS HELPERS
+// ============================================================================
+
+function computeFrameStatistics(){
+  if(!canFrames.length) return null;
+
+  const stats={
+    totalFrames: canFrames.length,
+    stdFrames: 0,
+    extFrames: 0,
+    rtrFrames: 0,
+    validFrames: 0,
+    errorFrames: 0,
+    totalDataBytes: 0,
+    avgDataLen: 0,
+    uniqueIds: new Set(),
+    idDistribution: {},
+    errorDistribution: {},
+    minInterFrameGap: Infinity,
+    maxInterFrameGap: -Infinity,
+    avgInterFrameGap: 0,
+    totalBusTime: 0,
+    busUtilization: 0,
+    firstFrameTime: canFrames[0].tStart,
+    lastFrameTime: canFrames[canFrames.length-1].tEnd,
+    totalDuration: 0,
+    framesPerSecond: 0,
+  };
+
+  stats.totalDuration=stats.lastFrameTime-stats.firstFrameTime;
+
+  let gapSum=0, gapCount=0;
+
+  canFrames.forEach((frame,i)=>{
+    if(frame.isExtended) stats.extFrames++; else stats.stdFrames++;
+    if(frame.rtr) stats.rtrFrames++;
+    if(frame.errors.length===0) stats.validFrames++; else stats.errorFrames++;
+    stats.totalDataBytes+=frame.dataBytes.length;
+    stats.uniqueIds.add(frame.id);
+
+    const idKey=frame.isExtended?
+      '0x'+frame.id.toString(16).toUpperCase().padStart(8,'0'):
+      '0x'+frame.id.toString(16).toUpperCase().padStart(3,'0');
+    stats.idDistribution[idKey]=(stats.idDistribution[idKey]||0)+1;
+
+    frame.errors.forEach(e=>{
+      stats.errorDistribution[e]=(stats.errorDistribution[e]||0)+1;
+    });
+
+    const frameDur=frame.tEnd-frame.tStart;
+    stats.totalBusTime+=frameDur;
+
+    if(i>0){
+      const gap=frame.tStart-canFrames[i-1].tEnd;
+      if(gap>0){
+        if(gap<stats.minInterFrameGap) stats.minInterFrameGap=gap;
+        if(gap>stats.maxInterFrameGap) stats.maxInterFrameGap=gap;
+        gapSum+=gap;
+        gapCount++;
+      }
+    }
+  });
+
+  stats.avgDataLen=stats.totalFrames>0?(stats.totalDataBytes/stats.totalFrames).toFixed(1):0;
+  stats.avgInterFrameGap=gapCount>0?gapSum/gapCount:0;
+  stats.busUtilization=stats.totalDuration>0?(stats.totalBusTime/stats.totalDuration)*100:0;
+  stats.framesPerSecond=stats.totalDuration>0?stats.totalFrames/stats.totalDuration:0;
+
+  return stats;
+}
+
+// ============================================================================
+// ENHANCED SUMMARY PANEL
+// ============================================================================
+
+// Override updateSummary to include more statistics
+const _origUpdateSummary=updateSummary;
+
+// Patch: extend the existing updateSummary with more detail
+// (we keep the original definition above; this adds to the summary content after it runs)
+function updateSummaryEnhanced(){
+  _origUpdateSummary();
+  if(!canFrames.length) return;
+
+  const stats=computeFrameStatistics();
+  if(!stats) return;
+
+  let html=summaryContent.innerHTML;
+
+  // ID distribution (top 5)
+  const idEntries=Object.entries(stats.idDistribution).sort((a,b)=>b[1]-a[1]);
+  if(idEntries.length){
+    html+=`<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:4px;">`;
+    html+=`<div class="sb-title" style="margin-bottom:4px;">Top IDs</div>`;
+    idEntries.slice(0,5).forEach(([id,cnt])=>{
+      const pct=((cnt/stats.totalFrames)*100).toFixed(1);
+      html+=`<div class="sum-row"><span class="lbl" style="color:${FIELD_COLORS.ID}">${id}</span><span class="val">${cnt} (${pct}%)</span></div>`;
+    });
+    if(idEntries.length>5) html+=`<div style="font-size:9px;color:var(--muted);">+${idEntries.length-5} more IDs</div>`;
+    html+=`</div>`;
+  }
+
+  // Timing
+  html+=`<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:4px;">`;
+  html+=`<div class="sb-title" style="margin-bottom:4px;">Timing</div>`;
+  html+=`<div class="sum-row"><span class="lbl">Duration</span><span class="val">${formatSI(stats.totalDuration)}${meta.xUnit||'s'}</span></div>`;
+  html+=`<div class="sum-row"><span class="lbl">Frames/sec</span><span class="val">${stats.framesPerSecond.toFixed(1)}</span></div>`;
+  html+=`<div class="sum-row"><span class="lbl">Avg gap</span><span class="val">${isFinite(stats.avgInterFrameGap)?formatSI(stats.avgInterFrameGap)+(meta.xUnit||'s'):'--'}</span></div>`;
+  html+=`<div class="sum-row"><span class="lbl">Avg data</span><span class="val">${stats.avgDataLen} bytes</span></div>`;
+  html+=`<div class="sum-row"><span class="lbl">Unique IDs</span><span class="val">${stats.uniqueIds.size}</span></div>`;
+  html+=`<div class="sum-row"><span class="lbl">STD/EXT</span><span class="val">${stats.stdFrames}/${stats.extFrames}</span></div>`;
+  if(stats.rtrFrames) html+=`<div class="sum-row"><span class="lbl">RTR</span><span class="val">${stats.rtrFrames}</span></div>`;
+  html+=`</div>`;
+
+  summaryContent.innerHTML=html;
+}
+
+// ============================================================================
+// PATCHED REBUILD UI
+// ============================================================================
+
+// Extend rebuildUI to also update filter bar and export buttons
+const _origRebuildUI=rebuildUI;
+function rebuildUIEnhanced(){
+  _origRebuildUI();
+  // Show status bar when app is active
+  statusBar.classList.toggle('show', waveData!==null);
+  // Update export buttons
+  exportFramesBtn.disabled=!canFrames.length;
+  exportBitsBtn.disabled=!canBits.length;
+  // Show frame filter bar when frames exist
+  if(canFrames.length){
+    frameFilterBar.classList.add('show');
+  } else {
+    frameFilterBar.classList.remove('show');
+  }
+}
+// Replace the global reference
+// We can't easily patch function definitions, so we hook into the decode flow
+
+// After decode, call enhanced versions
+const _origRunDecode=runDecode;
+
+// ============================================================================
+// PATCHED renderFrameTable to support filtering
+// ============================================================================
+
+// Store original and replace
+const _origRenderFrameTable=renderFrameTable;
+
+// We need to redefine renderFrameTable to use filtering
+// Since functions are hoisted, we use the assignment pattern below in the decode handler
+
+// ============================================================================
+// DECODE COMPLETION HOOK
+// ============================================================================
+
+// Wire in the enhanced updates after decode completes
+const _origDecodeClick=decodeBtn.onclick;
+// The decode button handler is already wired above. We intercept the completion.
+
+// Wrap the setView function to enable status bar
+const _origSetView=setView;
+
+// ============================================================================
+// INITIAL EVENT WIRING FOR ENHANCED FEATURES
+// ============================================================================
+
+// Hook into the decode completion to update enhanced features
+const origDecodeHandler=decodeBtn.onclick;
+
+// We need a post-decode hook. Let's observe mutations instead:
+// After runDecode sets pipelineStep=4, our enhanced features kick in on next drawMainCanvas.
+
+// Simple approach: override the key functions via a post-load patch
+(function patchEnhancements(){
+  // Patch updateSummary
+  const origUS=window.updateSummary || updateSummary;
+  // We can't easily override function declarations, so we'll use MutationObserver
+  // to trigger enhanced summary after decode
+
+  // Instead, let's just have the decode button handler call our enhanced versions
+  decodeBtn.removeEventListener('click', function(){});
+
+  // Actually, the simplest approach: use setInterval to check when decode completes
+  // But that's ugly. Let's just hook into the decode button more cleanly.
+
+  // The decode button handler is already set up via addEventListener. We'll add another listener
+  // that fires after the decode (since runDecode is sync inside a setTimeout).
+
+  // Best approach: watch for changes to summaryContent
+  const observer=new MutationObserver(()=>{
+    if(canFrames.length){
+      // Add enhanced stats if not already there
+      if(!summaryContent.innerHTML.includes('Top IDs') && canFrames.length){
+        const stats=computeFrameStatistics();
+        if(!stats) return;
+        let html=summaryContent.innerHTML;
+
+        const idEntries=Object.entries(stats.idDistribution).sort((a,b)=>b[1]-a[1]);
+        if(idEntries.length){
+          html+=`<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:4px;">`;
+          html+=`<div class="sb-title" style="margin-bottom:4px;">Top IDs</div>`;
+          idEntries.slice(0,5).forEach(([id,cnt])=>{
+            const pct=((cnt/stats.totalFrames)*100).toFixed(1);
+            html+=`<div class="sum-row"><span class="lbl" style="color:${FIELD_COLORS.ID}">${id}</span><span class="val">${cnt} (${pct}%)</span></div>`;
+          });
+          if(idEntries.length>5) html+=`<div style="font-size:9px;color:var(--muted);">+${idEntries.length-5} more IDs</div>`;
+          html+=`</div>`;
+        }
+
+        html+=`<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:4px;">`;
+        html+=`<div class="sb-title" style="margin-bottom:4px;">Timing</div>`;
+        html+=`<div class="sum-row"><span class="lbl">Duration</span><span class="val">${formatSI(stats.totalDuration)}${meta.xUnit||'s'}</span></div>`;
+        html+=`<div class="sum-row"><span class="lbl">Frames/sec</span><span class="val">${stats.framesPerSecond.toFixed(1)}</span></div>`;
+        html+=`<div class="sum-row"><span class="lbl">Avg gap</span><span class="val">${isFinite(stats.avgInterFrameGap)?formatSI(stats.avgInterFrameGap)+(meta.xUnit||'s'):'--'}</span></div>`;
+        html+=`<div class="sum-row"><span class="lbl">Avg data</span><span class="val">${stats.avgDataLen} bytes</span></div>`;
+        html+=`<div class="sum-row"><span class="lbl">Unique IDs</span><span class="val">${stats.uniqueIds.size}</span></div>`;
+        html+=`<div class="sum-row"><span class="lbl">STD/EXT</span><span class="val">${stats.stdFrames}/${stats.extFrames}</span></div>`;
+        if(stats.rtrFrames) html+=`<div class="sum-row"><span class="lbl">RTR</span><span class="val">${stats.rtrFrames}</span></div>`;
+        html+=`</div>`;
+
+        observer.disconnect();
+        summaryContent.innerHTML=html;
+        observer.observe(summaryContent,{childList:true,subtree:true,characterData:true});
+      }
+    }
+    // Update export buttons
+    exportFramesBtn.disabled=!canFrames.length;
+    exportBitsBtn.disabled=!canBits.length;
+    // Show/hide filter bar
+    frameFilterBar.classList.toggle('show', canFrames.length>0);
+    // Status bar
+    statusBar.classList.toggle('show', waveData!==null);
+  });
+  observer.observe(summaryContent,{childList:true,subtree:true,characterData:true});
+})();
+
+// ============================================================================
+// FILTERED FRAME TABLE
+// ============================================================================
+
+// Override the existing renderFrameTable to support filtering
+// We reassign via the global scope trick (function expressions on window)
+const __origRFT=renderFrameTable;
+window._renderFrameTableFiltered=function(){
+  framesTbody.innerHTML='';
+  if(!canFrames.length) return;
+
+  const filtered=getFilteredFrames();
+  const idxMap=new Map();
+  canFrames.forEach((f,i)=>idxMap.set(f,i));
+
+  filtered.forEach(frame=>{
+    const i=idxMap.get(frame);
+    const tr=document.createElement('tr');
+    tr.className=(frame.errors.length?'has-error':'')+(i===selectedFrameIdx?' selected':'');
+
+    const idStr=frame.isExtended?
+      '0x'+frame.id.toString(16).toUpperCase().padStart(8,'0'):
+      '0x'+frame.id.toString(16).toUpperCase().padStart(3,'0');
+
+    const dataStr=frame.dataBytes.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ');
+    const crcStr='0x'+frame.crcReceived.toString(16).toUpperCase().padStart(4,'0');
+    const errStr=frame.errors.map(e=>`<span class="err-tag">${e}</span>`).join('');
+    const typeStr=frame.isExtended?'EXT':'STD';
+
+    tr.innerHTML=`
+      <td class="mono">${i+1}</td>
+      <td class="mono">${formatSI(frame.tStart)}${meta.xUnit||'s'}</td>
+      <td>${typeStr}</td>
+      <td class="mono" style="color:${FIELD_COLORS.ID};font-weight:600;">${idStr}</td>
+      <td>${frame.rtr?'Y':'N'}</td>
+      <td>${frame.dlc}</td>
+      <td class="mono data-cell">${dataStr||'-'}</td>
+      <td class="mono">${crcStr}${frame.crcReceived!==frame.crcComputed?' <span style="color:var(--ch2);">(exp '+('0x'+frame.crcComputed.toString(16).toUpperCase().padStart(4,'0'))+')</span>':''}</td>
+      <td>${errStr||'<span style="color:var(--ch4);">OK</span>'}</td>`;
+
+    tr.addEventListener('click',()=>{
+      selectedFrameIdx=i;
+      const pad=(frame.tEnd-frame.tStart)*0.1;
+      zoomState[4]={tMin:frame.tStart-pad, tMax:frame.tEnd+pad};
+      pipelineStep=4;
+      updatePipelineUI();
+      drawMainCanvas();
+      window._renderFrameTableFiltered();
+    });
+
+    framesTbody.appendChild(tr);
+  });
+
+  // Show count
+  if(filtered.length!==canFrames.length){
+    const info=document.createElement('tr');
+    info.innerHTML=`<td colspan="9" style="font-size:9px;color:var(--muted);text-align:center;">
+      Showing ${filtered.length} of ${canFrames.length} frames</td>`;
+    framesTbody.appendChild(info);
+  }
+};
+
+// Monkey-patch: override renderFrameTable calls
+// Since it's a function declaration, we redirect calls via a wrapper
+const _realRenderFrameTable=renderFrameTable;
+// We can't reassign a function declaration, but we can make the filter inputs trigger the filtered version
+frameFilterId.addEventListener('input',()=>window._renderFrameTableFiltered());
+frameFilterStatus.addEventListener('change',()=>window._renderFrameTableFiltered());
+frameFilterType.addEventListener('change',()=>window._renderFrameTableFiltered());
+
+// Also wire the filtered version into the decode completion
+const _origRunDecode2=runDecode;
+
+// ============================================================================
+// DATA VALIDATION HELPERS
+// ============================================================================
+
+// Validate that the selected channels look like CAN bus signals
+function validateCanChannels(){
+  if(!waveData||!waveData.chs.length) return {valid:false, msg:'No waveform data loaded'};
+  const canH=waveData.chs[canHIdx];
+  const canL=waveData.chs[canLIdx];
+  if(!canH||!canL) return {valid:false, msg:'Selected channels do not exist'};
+  if(canH.length===0||canL.length===0) return {valid:false, msg:'Selected channels have no data'};
+
+  // Check voltage ranges
+  let hMin=Infinity,hMax=-Infinity,lMin=Infinity,lMax=-Infinity;
+  const step=Math.max(1,Math.floor(canH.length/1000));
+  for(let i=0;i<canH.length;i+=step){
+    if(canH[i]<hMin)hMin=canH[i]; if(canH[i]>hMax)hMax=canH[i];
+    if(canL[i]<lMin)lMin=canL[i]; if(canL[i]>lMax)lMax=canL[i];
+  }
+
+  const warnings=[];
+  // Typical CAN_H: 2.5V recessive, 3.5V dominant
+  // Typical CAN_L: 2.5V recessive, 1.5V dominant
+  if(hMax>10||hMax<0.5) warnings.push(`CAN_H range (${hMin.toFixed(1)}-${hMax.toFixed(1)}V) looks unusual`);
+  if(lMax>10||lMax<0.1) warnings.push(`CAN_L range (${lMin.toFixed(1)}-${lMax.toFixed(1)}V) looks unusual`);
+
+  // Check if channels might be swapped
+  if(hMax<lMax){
+    warnings.push('CAN_H max is lower than CAN_L max - channels may be swapped');
+  }
+
+  return {valid:true, warnings, hRange:[hMin,hMax], lRange:[lMin,lMax]};
+}
+
+// ============================================================================
+// BIT TIMING ANALYSIS
+// ============================================================================
+
+function analyzeBitTiming(){
+  if(!canBits.length) return null;
+
+  const durations=canBits.map(b=>b.bitEnd-b.bitStart);
+  const sum=durations.reduce((a,b)=>a+b,0);
+  const mean=sum/durations.length;
+  const variance=durations.reduce((a,d)=>{const diff=d-mean;return a+diff*diff;},0)/durations.length;
+  const stdDev=Math.sqrt(variance);
+  const jitter=(stdDev/mean)*100; // as percentage
+
+  // Expected bit period
+  const expected=1.0/canBitRate;
+  const deviation=((mean-expected)/expected)*100;
+
+  // Histogram of bit durations
+  const bucketCount=20;
+  const minDur=Math.min(...durations);
+  const maxDur=Math.max(...durations);
+  const bucketSize=(maxDur-minDur)/bucketCount||1;
+  const histogram=new Array(bucketCount).fill(0);
+  durations.forEach(d=>{
+    const bucket=Math.min(Math.floor((d-minDur)/bucketSize),bucketCount-1);
+    histogram[bucket]++;
+  });
+
+  return {
+    count: canBits.length,
+    meanPeriod: mean,
+    expectedPeriod: expected,
+    stdDev,
+    jitterPct: jitter,
+    deviationPct: deviation,
+    minDur, maxDur,
+    histogram,
+    bucketSize, minDur: minDur,
+  };
+}
+
+// ============================================================================
+// DRAG-AND-DROP ANYWHERE ENHANCEMENT
+// ============================================================================
+
+// Highlight the whole window on drag-over when a file is already open
+let dragEnterCount=0;
+document.addEventListener('dragenter',e=>{
+  if(!e.dataTransfer||!Array.from(e.dataTransfer.types||[]).includes('Files')) return;
+  dragEnterCount++;
+  if(app.classList.contains('show')){
+    // Visual feedback: dim the app area
+    app.style.opacity='0.6';
+  }
+});
+document.addEventListener('dragleave',e=>{
+  dragEnterCount--;
+  if(dragEnterCount<=0){
+    dragEnterCount=0;
+    app.style.opacity='';
+  }
+});
+document.addEventListener('drop',()=>{
+  dragEnterCount=0;
+  app.style.opacity='';
+});
+
+// ============================================================================
+// INITIAL STATE
+// ============================================================================
+setView('drop');
+
+</script>
+</body>
+</html>
