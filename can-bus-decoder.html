@@ -270,10 +270,17 @@ header{display:flex;align-items:center;gap:14px;padding:9px 18px;
       <div class="sb-section">
         <div class="sb-title">CAN Configuration</div>
         <div class="sb-row">
-          <label>CAN_H</label>
+          <label>Input</label>
+          <select id="sel-input-mode">
+            <option value="dual" selected>CAN_H / CAN_L</option>
+            <option value="diff">Differential</option>
+          </select>
+        </div>
+        <div class="sb-row" id="row-canh">
+          <label id="lbl-canh">CAN_H</label>
           <select id="sel-canh"></select>
         </div>
-        <div class="sb-row">
+        <div class="sb-row" id="row-canl">
           <label>CAN_L</label>
           <select id="sel-canl"></select>
         </div>
@@ -525,6 +532,7 @@ let zoomState={
 };
 
 // CAN config
+let canInputMode='dual'; // 'dual' = CAN_H/CAN_L, 'diff' = single differential channel
 let canHIdx=0, canLIdx=1;
 let canBitRate=500000, canThreshold=0.7, canHysteresis=0.1;
 
@@ -581,7 +589,7 @@ function makeSession(name){
     globalYMin:Infinity, globalYMax:-Infinity,
     waveData:null, waveRowStart:0, waveRowEnd:0,
     zoomState:{1:{tMin:null,tMax:null},2:{tMin:null,tMax:null},3:{tMin:null,tMax:null},4:{tMin:null,tMax:null}},
-    canHIdx:0, canLIdx:1, canBitRate:500000, canThreshold:0.7, canHysteresis:0.1,
+    canInputMode:'dual', canHIdx:0, canLIdx:1, canBitRate:500000, canThreshold:0.7, canHysteresis:0.1,
     diffData:null, canSegments:[], canBits:[], canBitsDestuffed:[], stuffPositions:[], stuffErrors:[],
     canFrames:[], pipelineStep:1, pipelineComplete:[true,false,false,false], selectedFrameIdx:-1,
   };
@@ -596,7 +604,7 @@ function saveCurrent(s){
   s.globalYMin=globalYMin; s.globalYMax=globalYMax;
   s.waveData=waveData; s.waveRowStart=waveRowStart; s.waveRowEnd=waveRowEnd;
   s.zoomState=zoomState;
-  s.canHIdx=canHIdx; s.canLIdx=canLIdx;
+  s.canInputMode=canInputMode; s.canHIdx=canHIdx; s.canLIdx=canLIdx;
   s.canBitRate=canBitRate; s.canThreshold=canThreshold; s.canHysteresis=canHysteresis;
   s.diffData=diffData; s.canSegments=canSegments;
   s.canBits=canBits; s.canBitsDestuffed=canBitsDestuffed;
@@ -615,7 +623,7 @@ function loadInto(s){
   globalYMin=s.globalYMin; globalYMax=s.globalYMax;
   waveData=s.waveData; waveRowStart=s.waveRowStart; waveRowEnd=s.waveRowEnd;
   zoomState=s.zoomState;
-  canHIdx=s.canHIdx; canLIdx=s.canLIdx;
+  canInputMode=s.canInputMode||'dual'; canHIdx=s.canHIdx; canLIdx=s.canLIdx;
   canBitRate=s.canBitRate; canThreshold=s.canThreshold; canHysteresis=s.canHysteresis;
   diffData=s.diffData; canSegments=s.canSegments;
   canBits=s.canBits; canBitsDestuffed=s.canBitsDestuffed;
@@ -1038,6 +1046,8 @@ function rebuildUI(){
   buildFileInfo();
   // Populate channel selects
   populateChannelSelects();
+  // Update input mode UI
+  updateInputModeUI();
   // Update pipeline UI
   updatePipelineUI();
   // Summary
@@ -1128,6 +1138,19 @@ document.querySelectorAll('.pipe-step').forEach(el=>{
 });
 
 // ── Config event handlers ──
+$('sel-input-mode').addEventListener('change',e=>{
+  canInputMode=e.target.value;
+  updateInputModeUI();
+});
+
+function updateInputModeUI(){
+  const isDiff=canInputMode==='diff';
+  $('row-canl').style.display=isDiff?'none':'flex';
+  $('lbl-canh').textContent=isDiff?'Channel':'CAN_H';
+  // Update sel-input-mode to match state
+  $('sel-input-mode').value=canInputMode;
+}
+
 $('sel-canh').addEventListener('change',e=>{ canHIdx=parseInt(e.target.value); });
 $('sel-canl').addEventListener('change',e=>{ canLIdx=parseInt(e.target.value); });
 $('sel-bitrate').addEventListener('change',e=>{
@@ -1154,6 +1177,7 @@ decodeBtn.addEventListener('click',()=>{
 function runDecode(){
   try {
     // Read config from UI
+    canInputMode=$('sel-input-mode').value;
     canHIdx=parseInt($('sel-canh').value);
     canLIdx=parseInt($('sel-canl').value);
     const brSel=$('sel-bitrate').value;
@@ -1162,21 +1186,40 @@ function runDecode(){
     canHysteresis=parseFloat($('inp-hysteresis').value)||0.1;
 
     const time=waveData.time;
-    const canH=waveData.chs[canHIdx];
-    const canL=waveData.chs[canLIdx];
 
-    if(!canH||!canL||canH.length===0){
-      alert('Selected channels have no data.');
-      decodeBtn.disabled=false; decodeBtn.textContent='Decode'; return;
+    if(canInputMode==='diff'){
+      // Differential input mode: single channel is already differential
+      const ch=waveData.chs[canHIdx];
+      if(!ch||ch.length===0){
+        alert('Selected channel has no data.');
+        decodeBtn.disabled=false; decodeBtn.textContent='Decode'; return;
+      }
+
+      // Step 1: raw is just this single channel
+      pipelineComplete[0]=true;
+
+      // Step 2: use channel directly as differential (no subtraction)
+      pipelineStatus.textContent='Using direct differential signal...';
+      diffData={time:time.slice(), diff:ch.slice()};
+      pipelineComplete[1]=true;
+    } else {
+      // Dual channel mode: CAN_H - CAN_L
+      const canH=waveData.chs[canHIdx];
+      const canL=waveData.chs[canLIdx];
+
+      if(!canH||!canL||canH.length===0){
+        alert('Selected channels have no data.');
+        decodeBtn.disabled=false; decodeBtn.textContent='Decode'; return;
+      }
+
+      // Step 1: already have raw (always complete)
+      pipelineComplete[0]=true;
+
+      // Step 2: Differential
+      pipelineStatus.textContent='Computing differential...';
+      diffData=computeDifferential(time,canH,canL);
+      pipelineComplete[1]=true;
     }
-
-    // Step 1: already have raw (always complete)
-    pipelineComplete[0]=true;
-
-    // Step 2: Differential
-    pipelineStatus.textContent='Computing differential...';
-    diffData=computeDifferential(time,canH,canL);
-    pipelineComplete[1]=true;
 
     // Step 2b: Schmitt trigger
     pipelineStatus.textContent='Applying Schmitt trigger...';
@@ -1883,14 +1926,23 @@ function drawRawWaveform(W,H){
   if(!zs||zs.tMin===null) return;
 
   const time=waveData.time;
-  const chs=waveData.chs;
+
+  // In differential mode, show only the selected channel
+  let chsToShow, visToUse;
+  if(canInputMode==='diff'){
+    chsToShow=[waveData.chs[canHIdx]];
+    visToUse=[true];
+  } else {
+    chsToShow=waveData.chs;
+    visToUse=visible;
+  }
 
   // Filter to zoom window
-  const vTime=[],vChs=chs.map(()=>[]);
+  const vTime=[],vChs=chsToShow.map(()=>[]);
   for(let i=0;i<time.length;i++){
     if(time[i]>=zs.tMin&&time[i]<=zs.tMax){
       vTime.push(time[i]);
-      chs.forEach((ch,ci)=>vChs[ci].push(ch[i]));
+      chsToShow.forEach((ch,ci)=>vChs[ci].push(ch[i]));
     }
   }
 
@@ -1899,7 +1951,11 @@ function drawRawWaveform(W,H){
   if(!isFinite(yMin)){yMin=globalYMin;yMax=globalYMax;}
   const yPad=(yMax-yMin)*0.08||0.1; yMin-=yPad; yMax+=yPad;
 
+  // Temporarily set visible for drawSignal
+  const savedVisible=visible;
+  visible=visToUse;
   drawSignal(ctx,W,H,vTime,vChs,zs.tMin,zs.tMax,yMin,yMax,PAD,true,false);
+  visible=savedVisible;
 }
 
 // ── Step 2: Differential ──
